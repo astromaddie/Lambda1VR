@@ -912,6 +912,11 @@ static qboolean R_SpriteHasLightmap( cl_entity_t *e, int texFormat )
 R_DrawSpriteModel
 =================
 */
+#ifdef L1VR_STEAM_FRAME
+#include <stdbool.h>
+bool VR_BillboardsLevel( void );
+#endif
+
 void R_DrawSpriteModel( cl_entity_t *e )
 {
 	mspriteframe_t	*frame, *oldframe;
@@ -921,6 +926,7 @@ void R_DrawSpriteModel( cl_entity_t *e )
 	float		angle, dot, sr, cr, flAlpha;
 	float		lerp = 1.0f, ilerp, scale;
 	vec3_t		v_forward, v_right, v_up;
+	vec3_t		view_right, view_up;
 	vec3_t		origin, color, color2 = {0.0f};
 
 	if( RI.params & RP_ENVVIEW )
@@ -1024,6 +1030,21 @@ void R_DrawSpriteModel( cl_entity_t *e )
 
 	type = psprite->type;
 
+	// the way the sprite faces the view: the view's own right and up, or with the head's roll taken out
+	// on the Frame, so a sprite stays upright in the world when the head tilts
+	VectorCopy( RI.vright, view_right );
+	VectorCopy( RI.vup, view_up );
+#ifdef L1VR_STEAM_FRAME
+	if( VR_BillboardsLevel( ))
+	{
+		vec3_t	level_angles, level_forward;
+
+		VectorCopy( RI.refdef.viewangles, level_angles );
+		level_angles[ROLL] = 0.0f;
+		AngleVectors( level_angles, level_forward, view_right, view_up );
+	}
+#endif
+
 	// automatically roll parallel sprites if requested
 	if( e->angles[ROLL] != 0.0f && type == SPR_FWD_PARALLEL )
 		type = SPR_FWD_PARALLEL_ORIENTED;
@@ -1053,14 +1074,14 @@ void R_DrawSpriteModel( cl_entity_t *e )
 		SinCos( angle, &sr, &cr );
 		for( i = 0; i < 3; i++ )
 		{
-			v_right[i] = (RI.vright[i] * cr + RI.vup[i] * sr);
-			v_up[i] = RI.vright[i] * -sr + RI.vup[i] * cr;
+			v_right[i] = (view_right[i] * cr + view_up[i] * sr);
+			v_up[i] = view_right[i] * -sr + view_up[i] * cr;
 		}
 		break;
 	case SPR_FWD_PARALLEL: // normal sprite
 	default:
-		VectorCopy( RI.vright, v_right ); 
-		VectorCopy( RI.vup, v_up );
+		VectorCopy( view_right, v_right ); 
+		VectorCopy( view_up, v_up );
 		break;
 	}
 
