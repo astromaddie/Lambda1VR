@@ -37,4 +37,5 @@ extern convar_t	*vr_stereo_side;
 
 #ifdef L1VR_STEAM_FRAME
 extern convar_t *vr_hud_distance;
+extern convar_t *vr_hud_level;
 #endif

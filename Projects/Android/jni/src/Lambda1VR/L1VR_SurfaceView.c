@@ -393,7 +393,8 @@ layer (a world-locked panel, it never rolls with the head) and in a scope.
 */
 float VR_GetHudRoll(int eye)
 {
-	if (eye < 0 || eye >= ovrMaxNumEyes || !gAppState.SessionActive || VR_UseScreenLayer() || isScopeEngaged())
+	if (eye < 0 || eye >= ovrMaxNumEyes || !gAppState.SessionActive || VR_UseScreenLayer() || isScopeEngaged() ||
+		vr_hud_level == NULL || vr_hud_level->integer == 0)
 		return 0.0f;
 
 	const float roll = cl.refdef.viewangles[ROLL];
@@ -488,6 +489,7 @@ convar_t	*vr_gesture_triggered_use;
 convar_t	*vr_use_gesture_boundary;
 #ifdef L1VR_STEAM_FRAME
 convar_t	*vr_hud_distance;
+convar_t	*vr_hud_level;
 #endif
 
 
@@ -568,6 +570,7 @@ void VR_Init()
         }
     }
     vr_hud_distance = Cvar_Get( "vr_hud_distance", "1.0", CVAR_ARCHIVE, "How far ahead the HUD sits, in metres" );
+    vr_hud_level = Cvar_Get( "vr_hud_level", "1", CVAR_ARCHIVE, "1 keeps the HUD and the text of scripted sequences level when the head rolls, 0 lets them roll with the head" );
 #endif
 
     //Not to be changed by users, as it will be overwritten anyway
