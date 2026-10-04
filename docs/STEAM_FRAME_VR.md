@@ -99,6 +99,18 @@ active.
 - The eye framebuffers use plain GLES 3 on the Frame, so the runtime's GL doesn't
   need `EXT_multisampled_render_to_texture`. It's one swapchain per eye, there's
   no multiview.
+- Each eye is drawn from the eye pose the runtime gives (position, and rotation if the eye
+  has one, in head space), and each projection view goes in with that eye's own pose. The
+  Quest build moves each eye by a fixed 65 mm along the side and submits both views with
+  the head's pose. On my Frame the runtime says the eyes are at +-34.5 mm (68.9 mm apart,
+  that's the headset's IPD setting), with no rotation, so for the world the difference is small. The
+  fixed pose in the layer was the wrong thing to tell the compositor though.
+- The HUD sits `vr_hud_distance` metres in front of you (archived cvar, default 1.0). The
+  client DLL (a submodule I can't touch) shifts every HUD item by width / 36 per eye, which
+  came to about 0.4 m on the Frame and was hard to look at. While the HUD draws, the DLL is told
+  the eyes are the mono ones (it adds nothing then), and the HUD is shifted instead by the
+  pixels that put it at that distance, from that eye's real position and focal length. A
+  scope and the flat menu screen are left as they were.
 - The eye framebuffers are made through gl4es but their attachments are set with the
   driver's own GL (`eglGetProcAddress`). The plain `gl*` names in `libxash.so` are gl4es's,
   and it swaps a texture it doesn't know for an empty one of its own.
@@ -125,8 +137,9 @@ active.
   and `-Wall` for the VR sources
 - `java/com/drbeef/lambda1vr/GLES3JNIActivity.java`: loader, data folder,
   permission check
-- `TBXR_Common.c/.h`, `OpenXrInput.c`, `L1VR_SurfaceView.c`, `common/port.h`: the
-  Frame code, all behind `L1VR_STEAM_FRAME`
+- `TBXR_Common.c/.h`, `OpenXrInput.c`, `L1VR_SurfaceView.c`, `VrEyeMath.c/.h` (new),
+  `VrCvars.h`, `common/port.h`, and in the engine `gl_rmain.c`, `gl_draw.c`, `cl_game.c`,
+  `cl_scrn.c`: the Frame code, all behind `L1VR_STEAM_FRAME`
 - `#include <string.h>` in `TBXR_Common.c` and `OpenXrInput.c`, which `-Wall` asked for
 
 ## The Quest build
@@ -160,6 +173,10 @@ Checked on the Frame, unattended (headset on a desk, nobody wearing it, started 
 - the first level (`c1a0`) loads from the Steam Half-Life files and both eyes show it, with
   a sensible difference between the eyes, turned 90 degrees too
 - the app quits cleanly when told to
+- the stereo, measured on the eye images with rays traced into the map: surfaces at 2.4 to
+  10 m land within 0.6 px of the interpupillary distance times the focal length over
+  the depth, a wall 58 m away shows 0.1 px where 0.7 is right, and the HUD at
+  `vr_hud_distance` 1 and 2 measured 41.0 and 21.0 px of disparity (41.4 and 20.7 expected)
 
 Checked on the Mac:
 
