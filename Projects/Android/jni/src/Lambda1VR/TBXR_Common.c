@@ -12,6 +12,9 @@
 
 #include "argtable3.h"
 #include "VrCommon.h"
+#ifdef L1VR_STEAM_FRAME
+#include "VrEyeMath.h"
+#endif
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -2427,6 +2430,27 @@ void TBXR_submitFrame()
 			memset(&projection_layer_elements[eye], 0, sizeof(XrCompositionLayerProjectionView));
 			projection_layer_elements[eye].type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW;
 			projection_layer_elements[eye].pose = gAppState.xfStageFromHead;
+#ifdef L1VR_STEAM_FRAME
+			// Each view goes in with the pose of its own eye, the one it was drawn from. The
+			// mono eyes of a scope are drawn from one point, so those keep the head's.
+			if (!isScopeEngaged()) {
+				const XrPosef* head = &gAppState.xfStageFromHead;
+				const XrPosef* local = &gAppState.Projections[eye].pose;
+				const float a[7] = {head->position.x, head->position.y, head->position.z,
+									head->orientation.x, head->orientation.y, head->orientation.z, head->orientation.w};
+				const float b[7] = {local->position.x, local->position.y, local->position.z,
+									local->orientation.x, local->orientation.y, local->orientation.z, local->orientation.w};
+				float out[7];
+				VrEye_ComposePose(a, b, out);
+				projection_layer_elements[eye].pose.position.x = out[0];
+				projection_layer_elements[eye].pose.position.y = out[1];
+				projection_layer_elements[eye].pose.position.z = out[2];
+				projection_layer_elements[eye].pose.orientation.x = out[3];
+				projection_layer_elements[eye].pose.orientation.y = out[4];
+				projection_layer_elements[eye].pose.orientation.z = out[5];
+				projection_layer_elements[eye].pose.orientation.w = out[6];
+			}
+#endif
 			// Must match the fov the eye was actually rendered with, or the compositor
 			// re-projects wrongly. Stays unzoomed while a scope is engaged so that the
 			// narrowed render frustum reads as real magnification.

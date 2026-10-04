@@ -668,6 +668,9 @@ static void R_SetupProjectionMatrix( const ref_params_t *fd, matrix4x4 m )
 }
 
 #ifdef VR
+#ifdef L1VR_STEAM_FRAME
+bool VR_GetEyeTransform( int eye, float worldScale, vec3_t offset, float *cantDegrees, vec3_t cantAxis );
+#endif
 /*
 =============
 R_SetupModelviewMatrix
@@ -677,10 +680,24 @@ static void R_SetupModelviewMatrix( const ref_params_t *fd, matrix4x4 m )
 {
     Matrix4x4_CreateModelview( m );
 
+#ifdef L1VR_STEAM_FRAME
+    // Each eye is where the runtime says it is, in the head's frame, turned the way
+    // it says too, instead of a fixed IPD along the side
+    if (vr_stereo_side->value == VR_EYE_LEFT || vr_stereo_side->value == VR_EYE_RIGHT) {
+		vec3_t eyeOffset, cantAxis;
+		float cantDegrees;
+		if (VR_GetEyeTransform(vr_stereo_side->integer, vr_worldscale->value, eyeOffset, &cantDegrees, cantAxis)) {
+			if (cantDegrees != 0.0f)
+				Matrix4x4_ConcatRotate(m, -cantDegrees, cantAxis[0], cantAxis[1], cantAxis[2]);
+			Matrix4x4_ConcatTranslate(m, -eyeOffset[0], -eyeOffset[1], -eyeOffset[2]);
+		}
+	}
+#else
     if (vr_stereo_side->value == VR_EYE_LEFT || vr_stereo_side->value == VR_EYE_RIGHT) {
 		Matrix4x4_ConcatTranslate(m, 0, vr_worldscale->value * (VR_IPD / 2.0f) *
 										((vr_stereo_side->integer - 0.5f) * 2.0f), 0);
 	}
+#endif
 
     Matrix4x4_ConcatRotate( m, -fd->viewangles[ROLL], 1, 0, 0 );
     Matrix4x4_ConcatRotate( m, -fd->viewangles[PITCH], 0, 1, 0 );

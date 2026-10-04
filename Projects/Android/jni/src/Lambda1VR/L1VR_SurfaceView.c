@@ -13,6 +13,9 @@
 #include "VrInput.h"
 #include "VrCvars.h"
 #include "VrCommon.h"
+#ifdef L1VR_STEAM_FRAME
+#include "VrEyeMath.h"
+#endif
 
 #include <common/common.h>
 #include <common/library.h>
@@ -322,6 +325,38 @@ void VR_Get2DOffset(int eye, int width, int height, float *dx, float *dy)
 	if (tanU - tanD > 0.0f)
 		*dy = (tanU + tanD) / (2.0f * (tanU - tanD)) * (float)height;
 }
+
+#ifdef L1VR_STEAM_FRAME
+/*
+Where an eye is for the world render, from the runtime's own eye pose in head space (the same
+poses and predicted time the layer is submitted with). offset is in world units, in the
+head-aligned engine axes. cantDegrees is the eye's turn relative to the head about cantAxis,
+0 when there is none. False when the eye isn't to be moved: the mono eyes of a scope, and the
+flat screen layer, where it's the middle that's wanted.
+*/
+bool VR_GetEyeTransform(int eye, float worldScale, vec3_t offset, float* cantDegrees, vec3_t cantAxis)
+{
+	*cantDegrees = 0.0f;
+	if (eye < 0 || eye >= ovrMaxNumEyes || !gAppState.SessionActive || gAppState.Projections == NULL || VR_UseScreenLayer())
+		return false;
+
+	const XrPosef* pose = &gAppState.Projections[eye].pose;
+	const float position[3] = {pose->position.x, pose->position.y, pose->position.z};
+	const float quat[4] = {pose->orientation.x, pose->orientation.y, pose->orientation.z, pose->orientation.w};
+	float offsetOut[3];
+	VrEye_ToEngineOffset(position, worldScale, offsetOut);
+	VectorSet(offset, offsetOut[0], offsetOut[1], offsetOut[2]);
+
+	float axis[3];
+	float degrees;
+	if (VrEye_CantAxisAngle(quat, axis, &degrees))
+	{
+		VectorSet(cantAxis, axis[0], axis[1], axis[2]);
+		*cantDegrees = degrees;
+	}
+	return true;
+}
+#endif
 
 void R_ChangeDisplaySettings( int width, int height, qboolean fullscreen );
 
