@@ -16,7 +16,8 @@ LOCAL_CFLAGS += -DVR
 
 # Valve Steam Frame build (gradle assembleFrame, docs/STEAM_FRAME_VR.md)
 ifeq ($(L1VR_STEAM_FRAME),1)
-LOCAL_CFLAGS += -DL1VR_STEAM_FRAME
+# the engine's messages go to logcat (tag Xash), but only with a developer level
+LOCAL_CFLAGS += -DL1VR_STEAM_FRAME -DDEFAULT_DEV=3
 endif
 
 LOCAL_CONLYFLAGS += -std=c99

@@ -504,6 +504,30 @@ static void ovrFramebuffer_Clear(ovrFramebuffer* frameBuffer) {
     frameBuffer->FrameBuffers = NULL;
 }
 
+#ifdef L1VR_STEAM_FRAME
+// The GL functions the swapchain attachments are set with, from the driver
+typedef struct {
+	void (GL_APIENTRYP GenRenderbuffers)(GLsizei n, GLuint* renderbuffers);
+	void (GL_APIENTRYP BindRenderbuffer)(GLenum target, GLuint renderbuffer);
+	void (GL_APIENTRYP RenderbufferStorage)(GLenum target, GLenum internalformat, GLsizei width, GLsizei height);
+	void (GL_APIENTRYP FramebufferTexture2D)(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
+	void (GL_APIENTRYP FramebufferRenderbuffer)(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer);
+	GLenum (GL_APIENTRYP CheckFramebufferStatus)(GLenum target);
+} TBXR_DriverGL;
+
+static TBXR_DriverGL driverGL;
+
+static void TBXR_LoadDriverGL()
+{
+	driverGL.GenRenderbuffers = (void*)eglGetProcAddress("glGenRenderbuffers");
+	driverGL.BindRenderbuffer = (void*)eglGetProcAddress("glBindRenderbuffer");
+	driverGL.RenderbufferStorage = (void*)eglGetProcAddress("glRenderbufferStorage");
+	driverGL.FramebufferTexture2D = (void*)eglGetProcAddress("glFramebufferTexture2D");
+	driverGL.FramebufferRenderbuffer = (void*)eglGetProcAddress("glFramebufferRenderbuffer");
+	driverGL.CheckFramebufferStatus = (void*)eglGetProcAddress("glCheckFramebufferStatus");
+}
+#endif
+
 typedef void (GL_APIENTRYP PFNGLRENDERBUFFERSTORAGEMULTISAMPLEEXTPROC) (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height);
 typedef void (GL_APIENTRYP PFNGLFRAMEBUFFERTEXTURE2DMULTISAMPLEEXTPROC) (GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level, GLsizei samples);
 
@@ -525,6 +549,9 @@ static bool ovrFramebuffer_Create(
     frameBuffer->Width = width;
     frameBuffer->Height = height;
     frameBuffer->Multisamples = multisamples;
+#ifdef L1VR_STEAM_FRAME
+    TBXR_LoadDriverGL();
+#endif
 
     XrSwapchainCreateInfo swapChainCreateInfo;
     memset(&swapChainCreateInfo, 0, sizeof(swapChainCreateInfo));
@@ -583,22 +610,28 @@ static bool ovrFramebuffer_Create(
 #ifdef L1VR_STEAM_FRAME
         if (multisamples <= 1) {
             // No multisampling, so plain GLES 3 does it and the runtime's GL doesn't
-            // have to offer EXT_multisampled_render_to_texture.
-            GL(glGenRenderbuffers(1, &frameBuffer->DepthBuffers[i]));
-            GL(glBindRenderbuffer(GL_RENDERBUFFER, frameBuffer->DepthBuffers[i]));
-            GL(glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height));
-            GL(glBindRenderbuffer(GL_RENDERBUFFER, 0));
+            // have to offer EXT_multisampled_render_to_texture. The attachments have to
+            // be set with the driver's own GL, the same way the EXT path above gets its
+            // functions: the plain names in this library are gl4es's, which would swap
+            // the swapchain's texture for one of its own and leave the attachment empty.
+            // The framebuffer itself is made and bound through gl4es though, it only
+            // binds framebuffers it has made (and the engine draws through it).
+            TBXR_DriverGL* gles = &driverGL;
+            gles->GenRenderbuffers(1, &frameBuffer->DepthBuffers[i]);
+            gles->BindRenderbuffer(GL_RENDERBUFFER, frameBuffer->DepthBuffers[i]);
+            gles->RenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height);
+            gles->BindRenderbuffer(GL_RENDERBUFFER, 0);
 
             GL(glGenFramebuffers(1, &frameBuffer->FrameBuffers[i]));
             GL(glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer->FrameBuffers[i]));
-            GL(glFramebufferTexture2D(
-                    GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0));
-            GL(glFramebufferRenderbuffer(
+            gles->FramebufferTexture2D(
+                    GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
+            gles->FramebufferRenderbuffer(
                     GL_FRAMEBUFFER,
                     GL_DEPTH_ATTACHMENT,
                     GL_RENDERBUFFER,
-                    frameBuffer->DepthBuffers[i]));
-            GL(GLenum renderFramebufferStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER));
+                    frameBuffer->DepthBuffers[i]);
+            GLenum renderFramebufferStatus = gles->CheckFramebufferStatus(GL_FRAMEBUFFER);
             GL(glBindFramebuffer(GL_FRAMEBUFFER, 0));
             if (renderFramebufferStatus != GL_FRAMEBUFFER_COMPLETE) {
                 ALOGE(

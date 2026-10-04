@@ -544,15 +544,6 @@ void * AppThreadFunction( void * parm )
 
 	TBXR_EnterVR();
 	TBXR_InitRenderer();
-#ifdef L1VR_STEAM_FRAME
-	//The positional movement scaling goes by vr_refresh, so make it the real rate
-	if (TBXR_GetRefresh() > 0)
-	{
-		char rate[16];
-		Q_snprintf(rate, sizeof(rate), "%d", TBXR_GetRefresh());
-		Cvar_Set2("vr_refresh", rate, true);
-	}
-#endif
 	TBXR_InitActions();
 	TBXR_WaitForSessionActive();
 
@@ -572,6 +563,20 @@ void * AppThreadFunction( void * parm )
 			TBXR_FrameSetup();
 
 #ifdef L1VR_STEAM_FRAME
+			{
+				//The positional movement scaling goes by vr_refresh. SteamVR picks the rate for
+				//the app, so take it from the frame period rather than from what's on offer.
+				static bool refreshSet = false;
+				const XrDuration period = gAppState.FrameState.predictedDisplayPeriod;
+				if (!refreshSet && period > 0)
+				{
+					char rate[16];
+					Q_snprintf(rate, sizeof(rate), "%d", (int)(1e9 / (double)period + 0.5));
+					Cvar_Set2("vr_refresh", rate, true);
+					ALOGI("[openxr] frame period %.2f ms, vr_refresh %s", period / 1e6, rate);
+					refreshSet = true;
+				}
+			}
 			if (!TBXR_ShouldRender())
 			{
 				//Standby: keep the frame loop going, but the game waits too
