@@ -69,3 +69,6 @@ build/intermediates/lint-cache/maven.google/master-index.xml
 build/intermediates/lint-cache/sdk-registry.xml/sdk-registry.xml
 assets/AoMDC/models/gmgeneral_display.aomdc
 /assets/background
+
+# Steam Frame build: the Khronos OpenXR loader gets fetched here
+Projects/Android/build/

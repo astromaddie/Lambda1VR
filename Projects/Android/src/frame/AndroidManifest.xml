@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Merged over the main manifest for the frame build type (Valve Steam Frame).
+	Its Android container (Lepton) doesn't advertise android.hardware.vr.headtracking,
+	so the install would fail with it required. The Quest and Pico shell metadata
+	doesn't do anything there either. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+	xmlns:tools="http://schemas.android.com/tools">
+
+	<uses-feature android:name="android.hardware.vr.headtracking"
+		tools:node="remove" />
+
+	<application>
+		<meta-data android:name="com.samsung.android.vr.application.mode" tools:node="remove" />
+		<meta-data android:name="com.oculus.supportedDevices" tools:node="remove" />
+		<meta-data android:name="com.oculus.dualcorecpuset" tools:node="remove" />
+		<meta-data android:name="com.oculus.trade_cpu_for_gpu_amount" tools:node="remove" />
+		<meta-data android:name="com.oculus.vr.focusaware" tools:node="remove" />
+		<meta-data android:name="pvr.app.type" tools:node="remove" />
+	</application>
+</manifest>

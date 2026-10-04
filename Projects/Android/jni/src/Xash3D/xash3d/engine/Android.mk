@@ -14,6 +14,11 @@ LOCAL_CFLAGS += -D__MULTITEXTURE_SUPPORT__ -DXASH_GLES -DXASH_GL4ES -DUSE_EVDEV 
 #enable VR compatibility
 LOCAL_CFLAGS += -DVR
 
+# Valve Steam Frame build (gradle assembleFrame, docs/STEAM_FRAME_VR.md)
+ifeq ($(L1VR_STEAM_FRAME),1)
+LOCAL_CFLAGS += -DL1VR_STEAM_FRAME
+endif
+
 LOCAL_CONLYFLAGS += -std=c99
 
 LOCAL_C_INCLUDES := \
@@ -179,6 +184,9 @@ LOCAL_SRC_FILES := \
            platform/android/vid_android.c \
            platform/android/android_nosdl.c \
            platform/android/dlsym-weak.cpp
+
+# warnings for the VR layer (argtable3 isn't ours)
+$(call add-src-files-target-cflags,$(filter-out %/argtable3.c,$(LAMBDA1VR_SRC_FILES)),-Wall)
 
 LOCAL_LDLIBS			:= -ldl -llog -landroid -lGLESv3 -lEGL		# include default libraries
 LOCAL_SHARED_LIBRARIES	:= openxr_loader gl4es

@@ -49,13 +49,26 @@ import static android.system.Os.setenv;
 			manufacturer = "meta";
 		}
 
-		try
+		if (BuildConfig.STEAM_FRAME)
 		{
-			//Load manufacturer specific loader
-			System.loadLibrary("openxr_loader_" + manufacturer);
-			setenv("OPENXR_HMD", manufacturer, true);
-		} catch (Exception e)
-		{}
+			//The Frame has no loader broker, so the Khronos loader is in the APK
+			System.loadLibrary("openxr_loader");
+			try
+			{
+				setenv("OPENXR_HMD", "steamframe", true);
+			} catch (Exception e)
+			{}
+		}
+		else
+		{
+			try
+			{
+				//Load manufacturer specific loader
+				System.loadLibrary("openxr_loader_" + manufacturer);
+				setenv("OPENXR_HMD", manufacturer, true);
+			} catch (Exception e)
+			{}
+		}
 
 		System.loadLibrary( "xash" );
 	}

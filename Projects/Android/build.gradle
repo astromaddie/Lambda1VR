@@ -11,6 +11,42 @@ buildscript {
 
 apply plugin: 'com.android.application'
 
+// Steam Frame build (./gradlew assembleFrame, see docs/STEAM_FRAME_VR.md).
+// The Frame's Android container has no OpenXR loader broker, so the Khronos
+// loader goes into the APK. It comes from Maven Central, gets checked against
+// this hash and is unpacked into build/ (never committed). Quest builds don't
+// touch any of this.
+def khronosLoaderVersion = '1.1.63'
+def khronosLoaderSha256 = '622419d2f6741c3443a3beb4779af0764318edd01830de967f24c741ebcded73'
+def khronosLoaderDir = file("build/openxr-loader/${khronosLoaderVersion}")
+def khronosLoaderSo = new File(khronosLoaderDir, 'libopenxr_loader.so')
+
+def fetchKhronosLoader = tasks.register('fetchKhronosLoader') {
+    outputs.file khronosLoaderSo
+    doLast {
+        def url = "https://repo1.maven.org/maven2/org/khronos/openxr/openxr_loader_for_android/${khronosLoaderVersion}/openxr_loader_for_android-${khronosLoaderVersion}.aar"
+        def aar = new File(khronosLoaderDir, 'openxr_loader_for_android.aar')
+        khronosLoaderDir.mkdirs()
+        new URL(url).withInputStream { input -> aar.withOutputStream { it << input } }
+        def digest = java.security.MessageDigest.getInstance('SHA-256')
+        aar.eachByte(8192) { buf, len -> digest.update(buf, 0, len) }
+        def sha = digest.digest().collect { String.format('%02x', it) }.join()
+        if (sha != khronosLoaderSha256) {
+            aar.delete()
+            throw new GradleException("OpenXR loader AAR has the wrong SHA-256 (${sha}), expected ${khronosLoaderSha256}")
+        }
+        def zip = new java.util.zip.ZipFile(aar)
+        try {
+            def entry = zip.getEntry('jni/arm64-v8a/libopenxr_loader.so')
+            if (entry == null) throw new GradleException('libopenxr_loader.so (arm64-v8a) is not in the loader AAR')
+            zip.getInputStream(entry).withStream { input -> khronosLoaderSo.withOutputStream { it << input } }
+        } finally {
+            zip.close()
+        }
+        aar.delete()
+    }
+}
+
 android {
 
     namespace = "com.drbeef.lambda1vr"
@@ -40,6 +76,13 @@ android {
 
         minSdkVersion 32
         targetSdkVersion 32
+
+        // True only in the frame build type
+        buildConfigField 'boolean', 'STEAM_FRAME', 'false'
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     externalNativeBuild {
@@ -103,6 +146,24 @@ android {
                 }
             }
         }
+
+        // Valve Steam Frame (Lepton, Android 11). Same as release, plus the
+        // Khronos OpenXR loader, a manifest overlay (src/frame) and L1VR_STEAM_FRAME
+        // for the native code. Signed with the debug key, it's only sideloaded.
+        frame {
+            initWith release
+            matchingFallbacks = ['release']
+            applicationIdSuffix ".frame"
+            versionNameSuffix "-frame"
+            signingConfig signingConfigs.debug
+            buildConfigField 'boolean', 'STEAM_FRAME', 'true'
+
+            externalNativeBuild {
+                ndkBuild {
+                    arguments "L1VR_STEAM_FRAME=1", "L1VR_OPENXR_LOADER=${khronosLoaderSo.absolutePath}", "APP_PLATFORM=android-30"
+                }
+            }
+        }
     }
 
     sourceSets.main {
@@ -131,6 +192,20 @@ android {
     buildToolsVersion = '29.0.3'
 
     ndkVersion '25.1.8937393'
+}
+
+// Lepton runs Android 11, the Quest build needs 12L (API 32)
+androidComponents {
+    beforeVariants(selector().withBuildType('frame')) { variantBuilder ->
+        variantBuilder.minSdk = 30
+    }
+}
+
+// The loader has to be there before ndk-build links against it
+tasks.configureEach { task ->
+    if (task.name == 'preFrameBuild') {
+        task.dependsOn fetchKhronosLoader
+    }
 }
 
 dependencies {
