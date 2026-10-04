@@ -283,6 +283,16 @@ two are not the same point, so 2D content anchored to the buffer centre would no
 the eyes. Shifting the ortho window here moves every 2D item at once.
 ===============
 */
+#ifdef L1VR_STEAM_FRAME
+// extra shift for the HUD pass (see CL_RedrawHUD), in pixels, positive to the right
+static float r_hudShift = 0.0f;
+
+void R_SetHudShift( float pixels )
+{
+	r_hudShift = pixels;
+}
+#endif
+
 void R_Get2DOffset( float *dx, float *dy )
 {
 	*dx = *dy = 0.0f;
@@ -292,6 +302,9 @@ void R_Get2DOffset( float *dx, float *dy )
 		return;
 
 	VR_Get2DOffset( vr_stereo_side->integer, glState.width, glState.height, dx, dy );
+#ifdef L1VR_STEAM_FRAME
+	*dx += r_hudShift;
+#endif
 }
 
 /*

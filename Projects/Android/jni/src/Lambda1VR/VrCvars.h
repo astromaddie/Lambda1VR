@@ -34,3 +34,7 @@ extern convar_t *vr_use_gesture_boundary;
 
 //Used and updated continuously during rendering
 extern convar_t	*vr_stereo_side;
+
+#ifdef L1VR_STEAM_FRAME
+extern convar_t *vr_hud_distance;
+#endif

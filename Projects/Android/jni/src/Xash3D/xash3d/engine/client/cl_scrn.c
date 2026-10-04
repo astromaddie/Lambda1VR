@@ -43,10 +43,19 @@ typedef struct
 static dirty_t	scr_dirty, scr_old_dirty[2];
 static qboolean	scr_init = false;
 
+#ifdef L1VR_STEAM_FRAME
+float VR_GetHudShift( int eye );
+#endif
+
 int GetStereoDepthOffset()
 {
 	if (vr_stereo_side->value >= VR_EYE_LEFT_MONO)
 		return 0;
+
+#ifdef L1VR_STEAM_FRAME
+	// the same place the HUD is put
+	return (int)VR_GetHudShift( vr_stereo_side->integer );
+#endif
 
 	return (int)( ( vr_stereo_side->value * -2.0f ) + 1.0f) * (scr_width->integer / 36.0f);
 }

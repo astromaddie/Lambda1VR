@@ -356,6 +356,32 @@ bool VR_GetEyeTransform(int eye, float worldScale, vec3_t offset, float* cantDeg
 	}
 	return true;
 }
+
+/*
+How far to shift the 2D content (the HUD) in an eye's image, in pixels, positive to the right,
+so that it sits vr_hud_distance metres ahead of the head. 0 for the mono eyes and the screen layer.
+*/
+float VR_GetHudShift(int eye)
+{
+	if (eye < 0 || eye >= ovrMaxNumEyes || !gAppState.SessionActive || gAppState.Projections == NULL ||
+		VR_UseScreenLayer() || vr_hud_distance == NULL)
+		return 0.0f;
+
+	const XrView* view = &gAppState.Projections[eye];
+	const int width = gAppState.Renderer.FrameBuffer[eye].Width;
+	const float shift = VrEye_HudShiftPixels(view->pose.position.x, view->fov.angleLeft, view->fov.angleRight,
+											 width, vr_hud_distance->value);
+
+	static bool logged[ovrMaxNumEyes];
+	if (!logged[eye])
+	{
+		logged[eye] = true;
+		ALOGI("[openxr] hud: eye %d at x %.1f mm, focal length %.0f px, vr_hud_distance %.2f m, shift %.1f px",
+			  eye, view->pose.position.x * 1000.0f, VrEye_FocalPixels(view->fov.angleLeft, view->fov.angleRight, width),
+			  vr_hud_distance->value, shift);
+	}
+	return shift;
+}
 #endif
 
 void R_ChangeDisplaySettings( int width, int height, qboolean fullscreen );
@@ -437,6 +463,9 @@ convar_t	*vr_quick_crouchjump;
 convar_t	*vr_stereo_side;
 convar_t	*vr_gesture_triggered_use;
 convar_t	*vr_use_gesture_boundary;
+#ifdef L1VR_STEAM_FRAME
+convar_t	*vr_hud_distance;
+#endif
 
 
 void initialize_gl4es();
@@ -496,6 +525,9 @@ void VR_Init()
     vr_quick_crouchjump = Cvar_Get( "vr_quick_crouchjump", "1", CVAR_ARCHIVE, "Set to 0 to disable quick crouch-jump mode (double clicking jump button triggers duck)" );
     vr_gesture_triggered_use = Cvar_Get( "vr_gesture_triggered_use", "1", CVAR_ARCHIVE, "Set to 0 to disable use gesture, 1 to enable" );
     vr_use_gesture_boundary = Cvar_Get( "vr_use_gesture_boundary", "0.35", CVAR_ARCHIVE, "Use gesture boundary" );
+#ifdef L1VR_STEAM_FRAME
+    vr_hud_distance = Cvar_Get( "vr_hud_distance", "1.0", CVAR_ARCHIVE, "How far ahead the HUD sits, in metres" );
+#endif
 
     //Not to be changed by users, as it will be overwritten anyway
 	vr_stereo_side = Cvar_Get( "vr_stereo_side", "0", CVAR_READ_ONLY, "Eye being drawn" );

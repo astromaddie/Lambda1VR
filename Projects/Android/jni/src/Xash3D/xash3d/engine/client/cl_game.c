@@ -1148,6 +1148,52 @@ static void CL_DrawPause( void )
 	R_DrawStretchPic( x, y, width, height, 0, 0, 1, 1, cls.pauseIcon );
 }
 
+#ifdef L1VR_STEAM_FRAME
+extern convar_t *vr_stereo_side;
+float VR_GetHudShift( int eye );
+void R_SetHudShift( float pixels );
+bool isScopeEngaged( void );
+
+/*
+===============
+CL_RedrawHUD
+
+The client DLL puts its HUD in front of the screen with a fixed sideways shift of width / 36
+per eye, which it works out from vr_stereo_side. That's about 0.4 m on the Frame's lenses, and
+tiring. While it draws, the eyes are given as the mono ones (that's 0 for it, and the 2D
+offset onto the optical axis still works for those), and the whole HUD is shifted here
+instead, to where vr_hud_distance says. A scope is mono already, so that is left alone.
+===============
+*/
+static void CL_RedrawHUD( void )
+{
+	const int eye = vr_stereo_side->integer;
+	float shift;
+
+	if( eye < VR_EYE_LEFT || eye > VR_EYE_RIGHT || isScopeEngaged( ))
+	{
+		CL_DrawCenterPrint ();
+		clgame.dllFuncs.pfnRedraw( cl.time, cl.refdef.intermission );
+		return;
+	}
+
+	shift = VR_GetHudShift( eye );
+
+	vr_stereo_side->value = eye + 2;
+	vr_stereo_side->integer = eye + 2;
+	R_SetHudShift( shift );
+	R_Set2DMode( true );
+
+	CL_DrawCenterPrint ();
+	clgame.dllFuncs.pfnRedraw( cl.time, cl.refdef.intermission );
+
+	vr_stereo_side->value = eye;
+	vr_stereo_side->integer = eye;
+	R_SetHudShift( 0.0f );
+	R_Set2DMode( true );
+}
+#endif
+
 void CL_DrawHUD( int state )
 {
 	if( state == CL_ACTIVE && !cl.video_prepped )
@@ -1161,14 +1207,22 @@ void CL_DrawHUD( int state )
 	case CL_ACTIVE:
 		CL_DrawScreenFade ();
 		CL_DrawCrosshair ();
+#ifdef L1VR_STEAM_FRAME
+		CL_RedrawHUD ();
+#else
 		CL_DrawCenterPrint ();
 		clgame.dllFuncs.pfnRedraw( cl.time, cl.refdef.intermission );
+#endif
 		break;
 	case CL_PAUSED:
 		CL_DrawScreenFade ();
 		CL_DrawCrosshair ();
+#ifdef L1VR_STEAM_FRAME
+		CL_RedrawHUD ();
+#else
 		CL_DrawCenterPrint ();
 		clgame.dllFuncs.pfnRedraw( cl.time, cl.refdef.intermission );
+#endif
 		CL_DrawPause();
 		break;
 	case CL_LOADING:
