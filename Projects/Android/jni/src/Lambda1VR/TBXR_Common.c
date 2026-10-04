@@ -129,8 +129,6 @@ const char* const requiredExtensionNames_pico[] = {
 #ifdef L1VR_STEAM_FRAME
 // SteamVR on the Frame doesn't have to offer what Quest or Pico do, so only
 // OpenGL ES is a must. The rest gets enabled when the runtime lists it.
-#define XR_VALVE_FRAME_CONTROLLER_INTERACTION_EXTENSION_NAME "XR_VALVE_frame_controller_interaction"
-
 static const char* const wantedExtensionNames_frame[] = {
 		XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME,
 		XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME,

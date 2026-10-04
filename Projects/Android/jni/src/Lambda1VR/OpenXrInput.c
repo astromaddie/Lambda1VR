@@ -1,4 +1,10 @@
+#include <string.h>
+
 #include "VrCommon.h"
+
+#ifdef L1VR_STEAM_FRAME
+#include "VrCvars.h"
+#endif
 
 extern ovrApp gAppState;
 
@@ -45,6 +51,10 @@ XrAction BTouchAction = 0;
 XrAction XTouchAction = 0;
 XrAction YTouchAction = 0;
 XrAction aimAction = 0;
+#ifdef L1VR_STEAM_FRAME
+XrAction viewAction = 0;
+XrAction bumperAction = 0;
+#endif
 
 XrSpace aimSpace[SIDE_COUNT];
 XrPath handSubactionPath[SIDE_COUNT];
@@ -128,6 +138,120 @@ void CreateAction(
     OXR(xrCreateAction(actionSet, &aci, action));
 }
 
+#ifdef L1VR_STEAM_FRAME
+/*
+================================================================================
+
+Steam Frame controllers
+
+The Frame's controllers are a split gamepad: the left one has the D-pad, View,
+bumper, trigger, grip and stick, the right one has A B X Y, Menu, bumper,
+trigger, grip and stick. They keep the same actions as the Quest layout:
+sticks, triggers, grips, stick clicks and A/B are where they were. The off hand's
+X and Y (torch and screen view) have no buttons on the left controller, so those
+are the left bumper and View (see TBXR_UpdateFrameLayout), with the right X and Y as
+a second way. Menu is the right one, and holding View recentres.
+
+Every path has to exist on the profile it's suggested for, or the runtime refuses
+the whole profile (the table check is tools/steam_frame/tests/check_bindings.py
+in the dev branch).
+
+================================================================================
+*/
+
+#define FRAME_PROFILE "/interaction_profiles/valve/frame_controller_valve"
+#define INDEX_PROFILE "/interaction_profiles/valve/index_controller"
+
+typedef struct {
+    XrAction* action;
+    const char* path;
+} profileBinding_t;
+
+static const profileBinding_t frameBindings[] = {
+    { &touchpadAction, "/user/hand/left/input/thumbstick/click" },
+    { &touchpadAction, "/user/hand/right/input/thumbstick/click" },
+    { &joystickAction, "/user/hand/left/input/thumbstick" },
+    { &joystickAction, "/user/hand/right/input/thumbstick" },
+    { &thumbstickTouchAction, "/user/hand/left/input/thumbstick/touch" },
+    { &thumbstickTouchAction, "/user/hand/right/input/thumbstick/touch" },
+    { &triggerAction, "/user/hand/left/input/trigger/value" },
+    { &triggerAction, "/user/hand/right/input/trigger/value" },
+    { &GripAction, "/user/hand/left/input/squeeze/value" },
+    { &GripAction, "/user/hand/right/input/squeeze/value" },
+    { &poseAction, "/user/hand/left/input/grip/pose" },
+    { &poseAction, "/user/hand/right/input/grip/pose" },
+    { &aimAction, "/user/hand/left/input/aim/pose" },
+    { &aimAction, "/user/hand/right/input/aim/pose" },
+    { &vibrateAction, "/user/hand/left/output/haptic" },
+    { &vibrateAction, "/user/hand/right/output/haptic" },
+    { &AAction, "/user/hand/right/input/a/click" },
+    { &BAction, "/user/hand/right/input/b/click" },
+    { &XAction, "/user/hand/right/input/x/click" },
+    { &YAction, "/user/hand/right/input/y/click" },
+    { &backAction, "/user/hand/right/input/menu/click" },
+    { &viewAction, "/user/hand/left/input/view/click" },
+    { &bumperAction, "/user/hand/left/input/bumper/click" },
+};
+
+//Index controllers on SteamVR: A and B on both hands, like the Touch ones. They
+//have no Menu button for apps, so the pause is the left trackpad pressed hard.
+static const profileBinding_t indexBindings[] = {
+    { &touchpadAction, "/user/hand/left/input/thumbstick/click" },
+    { &touchpadAction, "/user/hand/right/input/thumbstick/click" },
+    { &joystickAction, "/user/hand/left/input/thumbstick" },
+    { &joystickAction, "/user/hand/right/input/thumbstick" },
+    { &thumbstickTouchAction, "/user/hand/left/input/thumbstick/touch" },
+    { &thumbstickTouchAction, "/user/hand/right/input/thumbstick/touch" },
+    { &triggerAction, "/user/hand/left/input/trigger/value" },
+    { &triggerAction, "/user/hand/right/input/trigger/value" },
+    { &TriggerTouchAction, "/user/hand/left/input/trigger/touch" },
+    { &TriggerTouchAction, "/user/hand/right/input/trigger/touch" },
+    { &GripAction, "/user/hand/left/input/squeeze/value" },
+    { &GripAction, "/user/hand/right/input/squeeze/value" },
+    { &poseAction, "/user/hand/left/input/grip/pose" },
+    { &poseAction, "/user/hand/right/input/grip/pose" },
+    { &aimAction, "/user/hand/left/input/aim/pose" },
+    { &aimAction, "/user/hand/right/input/aim/pose" },
+    { &vibrateAction, "/user/hand/left/output/haptic" },
+    { &vibrateAction, "/user/hand/right/output/haptic" },
+    { &XAction, "/user/hand/left/input/a/click" },
+    { &YAction, "/user/hand/left/input/b/click" },
+    { &AAction, "/user/hand/right/input/a/click" },
+    { &BAction, "/user/hand/right/input/b/click" },
+    { &XTouchAction, "/user/hand/left/input/a/touch" },
+    { &YTouchAction, "/user/hand/left/input/b/touch" },
+    { &ATouchAction, "/user/hand/right/input/a/touch" },
+    { &BTouchAction, "/user/hand/right/input/b/touch" },
+    { &backAction, "/user/hand/left/input/trackpad/force" },
+};
+
+static XrResult TBXR_SuggestBindings(const char* profile, const profileBinding_t* table, int count)
+{
+    XrPath profilePath;
+    CHECK_XRCMD(xrStringToPath(gAppState.Instance, profile, &profilePath));
+
+    XrActionSuggestedBinding bindings[128];
+    for (int i = 0; i < count; i++) {
+        XrPath path;
+        CHECK_XRCMD(xrStringToPath(gAppState.Instance, table[i].path, &path));
+        bindings[i] = ActionSuggestedBinding(*table[i].action, path);
+    }
+
+    XrInteractionProfileSuggestedBinding suggestedBindings = {};
+    suggestedBindings.type = XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING;
+    suggestedBindings.interactionProfile = profilePath;
+    suggestedBindings.suggestedBindings = bindings;
+    suggestedBindings.countSuggestedBindings = count;
+    suggestedBindings.next = NULL;
+    XrResult result = xrSuggestInteractionProfileBindings(gAppState.Instance, &suggestedBindings);
+
+    char resultString[XR_MAX_RESULT_STRING_SIZE];
+    xrResultToString(gAppState.Instance, result, resultString);
+    ALOGI("[openxr] suggested %d bindings for %s: %s", count, profile, resultString);
+    return result;
+}
+#endif
+
 void TBXR_InitActions( void )
 {
     // Create an action set.
@@ -182,6 +306,10 @@ void TBXR_InitActions( void )
         CreateAction(actionSet, XR_ACTION_TYPE_BOOLEAN_INPUT, "btouch", "Btouch", SIDE_COUNT, handSubactionPath, &BTouchAction);
         CreateAction(actionSet, XR_ACTION_TYPE_BOOLEAN_INPUT, "xtouch", "Xtouch", SIDE_COUNT, handSubactionPath, &XTouchAction);
         CreateAction(actionSet, XR_ACTION_TYPE_BOOLEAN_INPUT, "ytouch", "Ytouch", SIDE_COUNT, handSubactionPath, &YTouchAction);
+#ifdef L1VR_STEAM_FRAME
+        CreateAction(actionSet, XR_ACTION_TYPE_BOOLEAN_INPUT, "viewkey", "Viewkey", SIDE_COUNT, handSubactionPath, &viewAction);
+        CreateAction(actionSet, XR_ACTION_TYPE_BOOLEAN_INPUT, "bumperkey", "Bumperkey", SIDE_COUNT, handSubactionPath, &bumperAction);
+#endif
     }
 
     XrPath selectPath[SIDE_COUNT];
@@ -276,6 +404,17 @@ void TBXR_InitActions( void )
 
     XrResult result;
 
+#ifdef L1VR_STEAM_FRAME
+    //SteamVR picks whichever profile matches the controllers, so suggest all of
+    //them: the Frame's own first, then Index, and Touch below
+    if (TBXR_ExtensionEnabled(XR_VALVE_FRAME_CONTROLLER_INTERACTION_EXTENSION_NAME)) {
+        TBXR_SuggestBindings(FRAME_PROFILE, frameBindings, sizeof(frameBindings) / sizeof(frameBindings[0]));
+    } else {
+        ALOGI("[openxr] the runtime doesn't offer the Frame controller extension, no suggestion for %s", FRAME_PROFILE);
+    }
+    TBXR_SuggestBindings(INDEX_PROFILE, indexBindings, sizeof(indexBindings) / sizeof(indexBindings[0]));
+    result = XR_ERROR_PATH_UNSUPPORTED;
+#else
     //First try Pico Devices
     {
         XrPath picoMixedRealityInteractionProfilePath;
@@ -334,6 +473,7 @@ void TBXR_InitActions( void )
         suggestedBindings.next = NULL;
         result = xrSuggestInteractionProfileBindings(gAppState.Instance, &suggestedBindings);
     }
+#endif
 
     if (result != XR_SUCCESS)
     {
@@ -385,6 +525,13 @@ void TBXR_InitActions( void )
         suggestedBindings.countSuggestedBindings = currBinding;
         suggestedBindings.next = NULL;
         result = xrSuggestInteractionProfileBindings(gAppState.Instance, &suggestedBindings);
+#ifdef L1VR_STEAM_FRAME
+        {
+            char resultString[XR_MAX_RESULT_STRING_SIZE];
+            xrResultToString(gAppState.Instance, result, resultString);
+            ALOGI("[openxr] suggested %d bindings for /interaction_profiles/oculus/touch_controller: %s", currBinding, resultString);
+        }
+#endif
     }
 
     XrActionSpaceCreateInfo actionSpaceInfo = {};
@@ -426,6 +573,124 @@ void TBXR_SyncActions( void )
         CHECK_XRCMD(xrSyncActions(gAppState.Session, &syncInfo));
     }
 }
+
+#ifdef L1VR_STEAM_FRAME
+static bool usingFrameProfile = false;
+
+//Which profile the runtime is using for the controllers right now, and does it
+//have our Frame layout
+static void TBXR_UpdateInteractionProfile()
+{
+    static char lastProfile[SIDE_COUNT][XR_MAX_PATH_LENGTH];
+
+    bool frame = false;
+    for (int hand = 0; hand < SIDE_COUNT; hand++) {
+        XrInteractionProfileState state = {};
+        state.type = XR_TYPE_INTERACTION_PROFILE_STATE;
+        char profile[XR_MAX_PATH_LENGTH] = "";
+        if (XR_SUCCEEDED(xrGetCurrentInteractionProfile(gAppState.Session, handSubactionPath[hand], &state)) &&
+            state.interactionProfile != XR_NULL_PATH) {
+            uint32_t length = 0;
+            xrPathToString(gAppState.Instance, state.interactionProfile, sizeof(profile), &length, profile);
+        }
+
+        if (strcmp(profile, lastProfile[hand]) != 0) {
+            strcpy(lastProfile[hand], profile);
+            ALOGI("[openxr] %s controller profile: %s", hand == SIDE_LEFT ? "left" : "right",
+                  profile[0] ? profile : "(none yet)");
+        }
+        frame |= (strcmp(profile, FRAME_PROFILE) == 0);
+    }
+    usingFrameProfile = frame;
+}
+
+//Holding View on the left controller: a short press is the off hand's Y (screen
+//view). 1 second recentres, 3 seconds recentres and takes the standing height.
+//Both buzz the controllers. Returns true for a frame when it was a short press.
+static bool TBXR_UpdateViewButton()
+{
+    static bool wasDown = false;
+    static double downTime = 0;
+    static int stage = 0;
+
+    const bool down = GetActionStateBoolean(viewAction, SIDE_LEFT).currentState != 0;
+    const double now = TBXR_GetTimeInMilliSeconds();
+    bool shortPress = false;
+
+    if (down && !wasDown) {
+        downTime = now;
+        stage = 0;
+    }
+
+    if (down) {
+        const double held = now - downTime;
+        if (stage < 1 && held >= 1000.0) {
+            TBXR_RecenterToHead(false);
+            TBXR_Vibrate(80, 0, 0.6f);
+            TBXR_Vibrate(80, 1, 0.6f);
+            stage = 1;
+        }
+        if (stage < 2 && held >= 3000.0) {
+            TBXR_RecenterToHead(true);
+            TBXR_Vibrate(80, 0, 0.6f);
+            TBXR_Vibrate(80, 1, 0.6f);
+            stage = 2;
+        }
+    } else if (wasDown && stage == 0) {
+        shortPress = true;
+    }
+
+    wasDown = down;
+    return shortPress;
+}
+
+//The game thinks in the Quest layout: A and B on the right controller, X and Y on
+//the left, and Menu on the left. When the Frame's controllers are in use this puts
+//the Frame's buttons into that shape. Handedness decides which hand is the
+//dominant one, and the buttons stay where they physically are:
+//  A: crouch, B: jump (the dominant hand's buttons in the game)
+//  left bumper or right X: torch, View (short) or right Y: screen view
+//  right Menu: pause (escape)
+static void TBXR_UpdateFrameLayout()
+{
+    TBXR_UpdateInteractionProfile();
+    if (!usingFrameProfile) {
+        return;
+    }
+
+    const bool leftHanded = (vr_control_scheme != NULL && vr_control_scheme->integer >= 10);
+
+    const bool crouch = (rightTrackedRemoteState_new.Buttons & xrButton_A) != 0;
+    const bool jump = (rightTrackedRemoteState_new.Buttons & xrButton_B) != 0;
+    const bool menu = ((rightTrackedRemoteState_new.Buttons | leftTrackedRemoteState_new.Buttons) & xrButton_Enter) != 0;
+    const bool torch = GetActionStateBoolean(bumperAction, SIDE_LEFT).currentState ||
+                       GetActionStateBoolean(XAction, SIDE_RIGHT).currentState;
+    const bool viewShort = TBXR_UpdateViewButton();
+    const bool screen = viewShort || GetActionStateBoolean(YAction, SIDE_RIGHT).currentState;
+
+    const uint32_t faceButtons = xrButton_A | xrButton_B | xrButton_X | xrButton_Y | xrButton_Enter;
+    leftTrackedRemoteState_new.Buttons &= ~faceButtons;
+    rightTrackedRemoteState_new.Buttons &= ~faceButtons;
+
+    ovrInputStateTrackedRemote* dominant = leftHanded ? &leftTrackedRemoteState_new : &rightTrackedRemoteState_new;
+    ovrInputStateTrackedRemote* offHand = leftHanded ? &rightTrackedRemoteState_new : &leftTrackedRemoteState_new;
+
+    //Which bits the game reads on each hand: the Quest's right hand has A and B,
+    //the left hand X and Y, and the left-handed schemes read them the other way round
+    const uint32_t domCrouch = leftHanded ? xrButton_X : xrButton_A;
+    const uint32_t domJump = leftHanded ? xrButton_Y : xrButton_B;
+    const uint32_t offTorch = leftHanded ? xrButton_A : xrButton_X;
+    const uint32_t offScreen = leftHanded ? xrButton_B : xrButton_Y;
+
+    if (crouch) dominant->Buttons |= domCrouch;
+    if (jump) dominant->Buttons |= domJump;
+    if (torch) offHand->Buttons |= offTorch;
+    if (screen) offHand->Buttons |= offScreen;
+
+    //Every scheme looks for the menu button on the left controller
+    if (menu) leftTrackedRemoteState_new.Buttons |= xrButton_Enter;
+}
+#endif
 
 void TBXR_UpdateControllers( )
 {
@@ -498,6 +763,10 @@ void TBXR_UpdateControllers( )
     moveJoystickState = GetActionStateVector2(joystickAction, SIDE_RIGHT);
     rightTrackedRemoteState_new.Joystick.x = moveJoystickState.currentState.x;
     rightTrackedRemoteState_new.Joystick.y = moveJoystickState.currentState.y;
+
+#ifdef L1VR_STEAM_FRAME
+    TBXR_UpdateFrameLayout();
+#endif
 }
 
 

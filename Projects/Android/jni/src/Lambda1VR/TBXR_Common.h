@@ -358,6 +358,8 @@ void TBXR_submitFrame();
 
 #ifdef L1VR_STEAM_FRAME
 //Steam Frame only
+#define XR_VALVE_FRAME_CONTROLLER_INTERACTION_EXTENSION_NAME "XR_VALVE_frame_controller_interaction"
+
 bool TBXR_ExtensionEnabled(const char* name);
 bool TBXR_ShouldRender();
 void TBXR_RecenterToHead(bool resetHeight);
