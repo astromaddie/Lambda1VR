@@ -5,8 +5,8 @@ apps in a container called Lepton (Android 11, arm64, GLES 3.2) on top of
 SteamVR's OpenXR runtime. So it's the same Android app, with a few changes to
 get it going there.
 
-I haven't tried this in the headset yet. It builds, the APK looks right, and
-that's all I can say so far. See the end for what's checked and what isn't.
+I haven't had it on my head yet. It builds, it runs on the Frame (unattended, on a desk) and it
+draws the first level in both eyes. See the end for what's checked and what isn't.
 
 ## Build
 
@@ -99,6 +99,14 @@ active.
 - The eye framebuffers use plain GLES 3 on the Frame, so the runtime's GL doesn't
   need `EXT_multisampled_render_to_texture`. It's one swapchain per eye, there's
   no multiview.
+- The eye framebuffers are made through gl4es but their attachments are set with the
+  driver's own GL (`eglGetProcAddress`). The plain `gl*` names in `libxash.so` are gl4es's,
+  and it swaps a texture it doesn't know for an empty one of its own.
+- The engine's messages go to logcat under the tag `Xash`. They always did, but the developer
+  level defaulted to 0, so nothing came out. It's 3 on the Frame build; `-dev` in
+  `commandline.txt` still wins.
+- `vr_refresh` is taken from the frame period, not from the refresh rates the runtime lists.
+  SteamVR sets the rate per app, and it offered 90 Hz while the display ran at 72.
 - The log lines that start with `[openxr]` say what was picked: runtime, enabled
   extensions, swapchain format and size, session state, which profiles got
   bindings and what the runtime answered.
@@ -126,6 +134,8 @@ active.
 I built `assembleRelease` before and after these changes. The repo doesn't ship
 the Meta loader, so both builds used the Khronos one as a stand-in to link.
 
+This was done before the shutdown fix below, and the comparison wasn't redone after it.
+
 - Everything except `libxash.so` is byte for byte the same.
 - The `string.h` includes change how a few functions in `libxash.so` compile
   (strcpy becomes the checked version, memset gets inlined differently).
@@ -135,8 +145,21 @@ the Meta loader, so both builds used the Khronos one as a stand-in to link.
   to the old build. Only the debug info and the build id differ, because line
   numbers moved.
 - The Quest APK gets a `BuildConfig` class in the dex, since Java checks it now.
+- One real change for Quest too: `jVM` in `L1VR_SurfaceView.c` was never set, so
+  `jni_shutdown` dereferenced NULL. The compiler drops everything after a call like
+  that, which made the quit path in `AppThreadFunction` run off the end of the function
+  (an abort on the Frame). `JNI_OnLoad` sets it now. I haven't built or run it on a Quest.
 
 ## Checked and not checked
+
+Checked on the Frame, unattended (headset on a desk, nobody wearing it, started over adb):
+
+- the Khronos loader finds SteamVR 2.17.10, 1728x1728 swapchains, the Frame, Index and Touch
+  binding suggestions all come back `XR_SUCCESS`
+- the session goes through READY and SYNCHRONIZED, the frame loop holds 72 fps
+- the first level (`c1a0`) loads from the Steam Half-Life files and both eyes show it, with
+  a sensible difference between the eyes, turned 90 degrees too
+- the app quits cleanly when told to
 
 Checked on the Mac:
 
@@ -148,9 +171,12 @@ Checked on the Mac:
 
 Not checked yet:
 
-- anything on the headset: install, start, the loader finding SteamVR,
-  session start, what the eyes see, controllers, performance, standby, quitting
-  from the SteamVR menu
+- anything with a person in the headset: how it looks and feels, scale, the HUD,
+  controllers, performance, quitting from the SteamVR menu
+- starting it from the Steam library (so far only over adb)
+- the replacement weapon and hand models: the repo's `assets` don't have the `.mdl`
+  files (they're git-ignored), so the engine logs that it can't load `v_hand.mdl` and
+  friends
 - that the Frame controller paths are accepted by the runtime (the log lines say)
 - the recentre buttons
 - Pico: nothing there changed as far as I can tell, but I can't build or run it
