@@ -522,10 +522,28 @@ void VR_Init()
 	vr_highlight_actionables = Cvar_Get( "vr_highlight_actionables", "1", CVAR_ARCHIVE, "Set to 0 to disable highlighting of actionable objects/entities" );
 	vr_headtorch = Cvar_Get( "vr_headtorch", "0", CVAR_ARCHIVE, "Set to 1 to enable head-torch flashlight mode" );
 	vr_reversetorch = Cvar_Get( "vr_reversetorch", "0", CVAR_ARCHIVE, "Set to 1 to enable reverse-direction flashlight mode" );
+#ifdef L1VR_STEAM_FRAME
+    // The Frame has a button for crouch, so double clicking jump isn't also crouch unless asked for.
+    // And use is the grips: this cvar makes the game take use from each hand, within a short reach of it
+    // (the automatic use by gesture is off on the Frame, the grips do it)
+    vr_quick_crouchjump = Cvar_Get( "vr_quick_crouchjump", "0", CVAR_ARCHIVE, "Set to 1 to enable quick crouch-jump mode (double clicking jump button triggers duck)" );
+    vr_gesture_triggered_use = Cvar_Get( "vr_gesture_triggered_use", "1", CVAR_ARCHIVE, "On the Steam Frame: 1 is a short reach from each hand for the grips to use (0 is the old 64 units from the weapon hand, and no use from the other hand)" );
+#else
     vr_quick_crouchjump = Cvar_Get( "vr_quick_crouchjump", "1", CVAR_ARCHIVE, "Set to 0 to disable quick crouch-jump mode (double clicking jump button triggers duck)" );
     vr_gesture_triggered_use = Cvar_Get( "vr_gesture_triggered_use", "1", CVAR_ARCHIVE, "Set to 0 to disable use gesture, 1 to enable" );
+#endif
     vr_use_gesture_boundary = Cvar_Get( "vr_use_gesture_boundary", "0.35", CVAR_ARCHIVE, "Use gesture boundary" );
 #ifdef L1VR_STEAM_FRAME
+    {
+        // The Frame's controller map changed some defaults that an earlier run may have saved, so
+        // set them once (this number goes up when the map changes defaults again)
+        convar_t* frameMap = Cvar_Get( "vr_frame_map", "0", CVAR_ARCHIVE, "Version of the Steam Frame controller map the saved settings were made for" );
+        if (frameMap->integer < 1) {
+            Cvar_SetFloat( "vr_quick_crouchjump", 0.0f );
+            Cvar_SetFloat( "vr_gesture_triggered_use", 1.0f );
+            Cvar_SetFloat( "vr_frame_map", 1.0f );
+        }
+    }
     vr_hud_distance = Cvar_Get( "vr_hud_distance", "1.0", CVAR_ARCHIVE, "How far ahead the HUD sits, in metres" );
 #endif
 

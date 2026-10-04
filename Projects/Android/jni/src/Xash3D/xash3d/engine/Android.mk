@@ -187,8 +187,12 @@ LOCAL_SRC_FILES := \
            platform/android/dlsym-weak.cpp
 
 ifeq ($(L1VR_STEAM_FRAME),1)
-LAMBDA1VR_SRC_FILES += $(LOCAL_PATH)/../../../Lambda1VR/VrEyeMath.c
-LOCAL_SRC_FILES += $(LOCAL_PATH)/../../../Lambda1VR/VrEyeMath.c
+LAMBDA1VR_SRC_FILES += $(LOCAL_PATH)/../../../Lambda1VR/VrEyeMath.c \
+		   $(LOCAL_PATH)/../../../Lambda1VR/VrFrameMap.c \
+		   $(LOCAL_PATH)/../../../Lambda1VR/VrInputFrame.c
+LOCAL_SRC_FILES += $(LOCAL_PATH)/../../../Lambda1VR/VrEyeMath.c \
+		   $(LOCAL_PATH)/../../../Lambda1VR/VrFrameMap.c \
+		   $(LOCAL_PATH)/../../../Lambda1VR/VrInputFrame.c
 endif
 
 # warnings for the VR layer (argtable3 isn't ours)

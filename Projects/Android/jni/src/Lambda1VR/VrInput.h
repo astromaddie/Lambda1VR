@@ -52,6 +52,11 @@ void updateScopeAngles(float forwardYaw);
 
 bool isBackpack(ovrTrackedController* pTracking);
 
+#ifdef L1VR_STEAM_FRAME
+// true while the Steam Frame's controller map is in charge: use comes from the grips and X, not from a gesture
+bool VR_FrameHandUse();
+#endif
+
 extern char * g_pszBackpackWeapon;
 
 #endif //VRINPUT_H

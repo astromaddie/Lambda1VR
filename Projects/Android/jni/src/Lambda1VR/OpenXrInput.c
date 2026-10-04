@@ -4,6 +4,7 @@
 
 #ifdef L1VR_STEAM_FRAME
 #include "VrCvars.h"
+#include "VrInputFrame.h"
 #endif
 
 extern ovrApp gAppState;
@@ -54,6 +55,10 @@ XrAction aimAction = 0;
 #ifdef L1VR_STEAM_FRAME
 XrAction viewAction = 0;
 XrAction bumperAction = 0;
+XrAction dpadUpAction = 0;
+XrAction dpadDownAction = 0;
+XrAction dpadLeftAction = 0;
+XrAction dpadRightAction = 0;
 #endif
 
 XrSpace aimSpace[SIDE_COUNT];
@@ -145,12 +150,9 @@ void CreateAction(
 Steam Frame controllers
 
 The Frame's controllers are a split gamepad: the left one has the D-pad, View,
-bumper, trigger, grip and stick, the right one has A B X Y, Menu, bumper,
-trigger, grip and stick. They keep the same actions as the Quest layout:
-sticks, triggers, grips, stick clicks and A/B are where they were. The off hand's
-X and Y (torch and screen view) have no buttons on the left controller, so those
-are the left bumper and View (see TBXR_UpdateFrameLayout), with the right X and Y as
-a second way. Menu is the right one, and holding View recentres.
+bumper, trigger, grip and stick, the right one has A B X Y, Menu, bumper, trigger,
+grip and stick. What each button does is in VrFrameMap.c (and the table in
+docs/STEAM_FRAME_VR.md); this file reads them, VrInputFrame.c applies the map.
 
 Every path has to exist on the profile it's suggested for, or the runtime refuses
 the whole profile (the table check is tools/steam_frame/tests/check_bindings.py
@@ -191,6 +193,11 @@ static const profileBinding_t frameBindings[] = {
     { &backAction, "/user/hand/right/input/menu/click" },
     { &viewAction, "/user/hand/left/input/view/click" },
     { &bumperAction, "/user/hand/left/input/bumper/click" },
+    { &bumperAction, "/user/hand/right/input/bumper/click" },
+    { &dpadUpAction, "/user/hand/left/input/dpad_up/click" },
+    { &dpadDownAction, "/user/hand/left/input/dpad_down/click" },
+    { &dpadLeftAction, "/user/hand/left/input/dpad_left/click" },
+    { &dpadRightAction, "/user/hand/left/input/dpad_right/click" },
 };
 
 //Index controllers on SteamVR: A and B on both hands, like the Touch ones. They
@@ -309,6 +316,10 @@ void TBXR_InitActions( void )
 #ifdef L1VR_STEAM_FRAME
         CreateAction(actionSet, XR_ACTION_TYPE_BOOLEAN_INPUT, "viewkey", "Viewkey", SIDE_COUNT, handSubactionPath, &viewAction);
         CreateAction(actionSet, XR_ACTION_TYPE_BOOLEAN_INPUT, "bumperkey", "Bumperkey", SIDE_COUNT, handSubactionPath, &bumperAction);
+        CreateAction(actionSet, XR_ACTION_TYPE_BOOLEAN_INPUT, "dpadup", "Dpadup", SIDE_COUNT, handSubactionPath, &dpadUpAction);
+        CreateAction(actionSet, XR_ACTION_TYPE_BOOLEAN_INPUT, "dpaddown", "Dpaddown", SIDE_COUNT, handSubactionPath, &dpadDownAction);
+        CreateAction(actionSet, XR_ACTION_TYPE_BOOLEAN_INPUT, "dpadleft", "Dpadleft", SIDE_COUNT, handSubactionPath, &dpadLeftAction);
+        CreateAction(actionSet, XR_ACTION_TYPE_BOOLEAN_INPUT, "dpadright", "Dpadright", SIDE_COUNT, handSubactionPath, &dpadRightAction);
 #endif
     }
 
@@ -604,53 +615,36 @@ static void TBXR_UpdateInteractionProfile()
     usingFrameProfile = frame;
 }
 
-//Holding View on the left controller: a short press is the off hand's Y (screen
-//view). 1 second recentres, 3 seconds recentres and takes the standing height.
-//Both buzz the controllers. Returns true for a frame when it was a short press.
-static bool TBXR_UpdateViewButton()
+//What the physical buttons say this frame
+static void TBXR_ReadFrameInputs(frameRaw_t* raw)
 {
-    static bool wasDown = false;
-    static double downTime = 0;
-    static int stage = 0;
+    raw->triggerLeft = GetActionStateFloat(triggerAction, SIDE_LEFT).currentState;
+    raw->triggerRight = GetActionStateFloat(triggerAction, SIDE_RIGHT).currentState;
+    raw->gripLeft = GetActionStateFloat(GripAction, SIDE_LEFT).currentState;
+    raw->gripRight = GetActionStateFloat(GripAction, SIDE_RIGHT).currentState;
+    raw->bumperLeft = GetActionStateBoolean(bumperAction, SIDE_LEFT).currentState != 0;
+    raw->bumperRight = GetActionStateBoolean(bumperAction, SIDE_RIGHT).currentState != 0;
+    raw->stickClickLeft = GetActionStateBoolean(touchpadAction, SIDE_LEFT).currentState != 0;
+    raw->stickClickRight = GetActionStateBoolean(touchpadAction, SIDE_RIGHT).currentState != 0;
+    raw->a = GetActionStateBoolean(AAction, SIDE_RIGHT).currentState != 0;
+    raw->b = GetActionStateBoolean(BAction, SIDE_RIGHT).currentState != 0;
+    raw->x = GetActionStateBoolean(XAction, SIDE_RIGHT).currentState != 0;
+    raw->y = GetActionStateBoolean(YAction, SIDE_RIGHT).currentState != 0;
+    raw->menu = GetActionStateBoolean(backAction, SIDE_RIGHT).currentState != 0;
+    raw->view = GetActionStateBoolean(viewAction, SIDE_LEFT).currentState != 0;
+    raw->dpadUp = GetActionStateBoolean(dpadUpAction, SIDE_LEFT).currentState != 0;
+    raw->dpadDown = GetActionStateBoolean(dpadDownAction, SIDE_LEFT).currentState != 0;
+    raw->dpadLeft = GetActionStateBoolean(dpadLeftAction, SIDE_LEFT).currentState != 0;
+    raw->dpadRight = GetActionStateBoolean(dpadRightAction, SIDE_LEFT).currentState != 0;
 
-    const bool down = GetActionStateBoolean(viewAction, SIDE_LEFT).currentState != 0;
-    const double now = TBXR_GetTimeInMilliSeconds();
-    bool shortPress = false;
-
-    if (down && !wasDown) {
-        downTime = now;
-        stage = 0;
-    }
-
-    if (down) {
-        const double held = now - downTime;
-        if (stage < 1 && held >= 1000.0) {
-            TBXR_RecenterToHead(false);
-            TBXR_Vibrate(80, 0, 0.6f);
-            TBXR_Vibrate(80, 1, 0.6f);
-            stage = 1;
-        }
-        if (stage < 2 && held >= 3000.0) {
-            TBXR_RecenterToHead(true);
-            TBXR_Vibrate(80, 0, 0.6f);
-            TBXR_Vibrate(80, 1, 0.6f);
-            stage = 2;
-        }
-    } else if (wasDown && stage == 0) {
-        shortPress = true;
-    }
-
-    wasDown = down;
-    return shortPress;
+    const XrActionStateVector2f left = GetActionStateVector2(joystickAction, SIDE_LEFT);
+    const XrActionStateVector2f right = GetActionStateVector2(joystickAction, SIDE_RIGHT);
+    raw->stickLeftX = left.currentState.x;
+    raw->stickLeftY = left.currentState.y;
+    raw->stickRightX = right.currentState.x;
+    raw->stickRightY = right.currentState.y;
 }
 
-//The game thinks in the Quest layout: A and B on the right controller, X and Y on
-//the left, and Menu on the left. When the Frame's controllers are in use this puts
-//the Frame's buttons into that shape. Handedness decides which hand is the
-//dominant one, and the buttons stay where they physically are:
-//  A: crouch, B: jump (the dominant hand's buttons in the game)
-//  left bumper or right X: torch, View (short) or right Y: screen view
-//  right Menu: pause (escape)
 static void TBXR_UpdateFrameLayout()
 {
     TBXR_UpdateInteractionProfile();
@@ -658,37 +652,9 @@ static void TBXR_UpdateFrameLayout()
         return;
     }
 
-    const bool leftHanded = (vr_control_scheme != NULL && vr_control_scheme->integer >= 10);
-
-    const bool crouch = (rightTrackedRemoteState_new.Buttons & xrButton_A) != 0;
-    const bool jump = (rightTrackedRemoteState_new.Buttons & xrButton_B) != 0;
-    const bool menu = ((rightTrackedRemoteState_new.Buttons | leftTrackedRemoteState_new.Buttons) & xrButton_Enter) != 0;
-    const bool torch = GetActionStateBoolean(bumperAction, SIDE_LEFT).currentState ||
-                       GetActionStateBoolean(XAction, SIDE_RIGHT).currentState;
-    const bool viewShort = TBXR_UpdateViewButton();
-    const bool screen = viewShort || GetActionStateBoolean(YAction, SIDE_RIGHT).currentState;
-
-    const uint32_t faceButtons = xrButton_A | xrButton_B | xrButton_X | xrButton_Y | xrButton_Enter;
-    leftTrackedRemoteState_new.Buttons &= ~faceButtons;
-    rightTrackedRemoteState_new.Buttons &= ~faceButtons;
-
-    ovrInputStateTrackedRemote* dominant = leftHanded ? &leftTrackedRemoteState_new : &rightTrackedRemoteState_new;
-    ovrInputStateTrackedRemote* offHand = leftHanded ? &rightTrackedRemoteState_new : &leftTrackedRemoteState_new;
-
-    //Which bits the game reads on each hand: the Quest's right hand has A and B,
-    //the left hand X and Y, and the left-handed schemes read them the other way round
-    const uint32_t domCrouch = leftHanded ? xrButton_X : xrButton_A;
-    const uint32_t domJump = leftHanded ? xrButton_Y : xrButton_B;
-    const uint32_t offTorch = leftHanded ? xrButton_A : xrButton_X;
-    const uint32_t offScreen = leftHanded ? xrButton_B : xrButton_Y;
-
-    if (crouch) dominant->Buttons |= domCrouch;
-    if (jump) dominant->Buttons |= domJump;
-    if (torch) offHand->Buttons |= offTorch;
-    if (screen) offHand->Buttons |= offScreen;
-
-    //Every scheme looks for the menu button on the left controller
-    if (menu) leftTrackedRemoteState_new.Buttons |= xrButton_Enter;
+    frameRaw_t raw;
+    TBXR_ReadFrameInputs(&raw);
+    VrInputFrame_Apply(&raw);
 }
 #endif
 

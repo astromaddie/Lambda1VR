@@ -208,7 +208,12 @@ void HandleInput_Default( ovrInputStateTrackedRemote *pDominantTrackedRemoteNew,
             weaponangles[MELEE][PITCH] *= -1.0f;
 
 			// Use (Action gesture)
+#ifdef L1VR_STEAM_FRAME
+			// On the Frame the grips do this: the cvar only sets how close the hand has to be
+			if (vr_gesture_triggered_use->integer && !VR_FrameHandUse()) {
+#else
 			if (vr_gesture_triggered_use->integer) {
+#endif
 				bool gestureUseAllowed = !vr_weapon_stabilised->value;
 				// Off-hand gesture
 				float xOffset = hmdPosition[0] - pOffTracking->Pose.position.x;
