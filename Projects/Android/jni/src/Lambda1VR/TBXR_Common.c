@@ -2288,6 +2288,52 @@ void TBXR_finishEyeBuffer(int eye )
 	ovrFramebuffer_SetNone();
 }
 
+#ifdef L1VR_STEAM_FRAME
+//Yaw, pitch and roll in degrees of a pose's orientation: forward is -z, up is y,
+//turning left is positive yaw
+static void TBXR_QuatAngles(XrQuaternionf q, float* yaw, float* pitch, float* roll)
+{
+	const float fx = -2.0f * (q.x * q.z + q.w * q.y);
+	const float fy = 2.0f * (q.y * q.z - q.w * q.x);
+	const float fz = -(1.0f - 2.0f * (q.x * q.x + q.y * q.y));
+	const float rx = 1.0f - 2.0f * (q.y * q.y + q.z * q.z);
+	const float ry = 2.0f * (q.x * q.y + q.w * q.z);
+	*yaw = RAD2DEG(atan2f(-fx, -fz));
+	*pitch = RAD2DEG(asinf(fy > 1.0f ? 1.0f : (fy < -1.0f ? -1.0f : fy)));
+	*roll = RAD2DEG(atan2f(ry, rx));
+}
+
+//Once: what the runtime says about each eye, relative to the head
+static void TBXR_LogEyeViews(const XrView* views, XrViewStateFlags flags)
+{
+	//The first answer, and the first one with valid poses (a headset in standby may not have them)
+	static bool loggedFirst = false;
+	static bool loggedValid = false;
+	const XrViewStateFlags valid = XR_VIEW_STATE_POSITION_VALID_BIT | XR_VIEW_STATE_ORIENTATION_VALID_BIT;
+	if (loggedFirst && (loggedValid || (flags & valid) != valid)) {
+		return;
+	}
+	loggedFirst = true;
+	loggedValid |= ((flags & valid) == valid);
+
+	ALOGI("[openxr] eye views (head space), view state flags 0x%x", (unsigned int)flags);
+	for (int eye = 0; eye < ovrMaxNumEyes; eye++) {
+		float yaw, pitch, roll;
+		TBXR_QuatAngles(views[eye].pose.orientation, &yaw, &pitch, &roll);
+		ALOGI("[openxr] eye %d: position %.1f %.1f %.1f mm, rotation yaw %.2f pitch %.2f roll %.2f deg, fov L %.3f R %.3f U %.3f D %.3f rad",
+			  eye,
+			  views[eye].pose.position.x * 1000.0f, views[eye].pose.position.y * 1000.0f, views[eye].pose.position.z * 1000.0f,
+			  yaw, pitch, roll,
+			  views[eye].fov.angleLeft, views[eye].fov.angleRight, views[eye].fov.angleUp, views[eye].fov.angleDown);
+	}
+	const XrVector3f d = {views[1].pose.position.x - views[0].pose.position.x,
+						  views[1].pose.position.y - views[0].pose.position.y,
+						  views[1].pose.position.z - views[0].pose.position.z};
+	ALOGI("[openxr] eye separation %.1f mm (the engine uses a fixed %.1f mm times vr_worldscale)",
+		  sqrtf(d.x * d.x + d.y * d.y + d.z * d.z) * 1000.0f, 65.0f);
+}
+#endif
+
 void TBXR_updateProjections()
 {
 	if (gAppState.SessionActive == GL_FALSE || gAppState.Projections == NULL) {
@@ -2318,6 +2364,10 @@ void TBXR_updateProjections()
 			projectionCapacityInput,
 			&projectionCountOutput,
 			located));
+
+#ifdef L1VR_STEAM_FRAME
+	TBXR_LogEyeViews(located, viewState.viewStateFlags);
+#endif
 
 	// Keep the previous frame's views rather than adopting an invalid pose or a zero fov,
 	// which would give a zero-width frustum.
