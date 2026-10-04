@@ -372,6 +372,9 @@ void TBXR_RecenterToHead(bool resetHeight);
 // The menu laser: where the weapon hand's aim ray meets the flat screen, 0..1 across and down. False
 // when the screen isn't showing or the hand isn't tracked (the ray can also miss the panel's edge).
 bool TBXR_ScreenPointer(float* u, float* v);
+
+// The eye image size from the recommended one times a scale, held to the limits. Before the swapchains are made.
+float TBXR_SetEyeScale(float scale);
 #endif
 
 #endif //vrcommon_h

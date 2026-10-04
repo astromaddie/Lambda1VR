@@ -140,8 +140,13 @@ says the Frame profile is active.
   Java loads it as `openxr_loader`.
 - Only OpenGL ES is required from the runtime. Everything else is enabled if
   the runtime lists it. There's no Pico or Meta code on that build.
-- It renders at the runtime's recommended eye size. The Quest build uses 1.3x of
-  it, which is a lot on the Frame.
+- The eye image is the runtime's recommended size (1728 square) times `vr_resolution_scale` (archived, default 1.25,
+  which is the panel's own 2160 square), held to what the view and the swapchain allow. The Quest build uses 1.3x of the
+  recommended size. The log has the recommended, the largest allowed and the size used.
+- `vr_refresh_rate` (archived, default 90) is the rate to ask for: the highest the runtime offers that isn't
+  over it, with the offered list, the request and the result in the log. SteamVR only offers an app the rate in
+  its per-app settings in the headset, so that's often the only one on the list. `vr_refresh`, which the game
+  uses to scale walking, follows the real frame period.
 - When the headset is in standby (`shouldRender` is false) the frame goes in with
   no layers and the game doesn't simulate. Without that the server kept running.
 - If SteamVR quits the app the game shuts down the normal way.

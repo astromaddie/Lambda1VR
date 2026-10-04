@@ -1486,6 +1486,91 @@ void ovrTrackedController_Clear(ovrTrackedController* controller) {
 	controller->Pose = XrPosef_Identity();
 }
 
+#ifdef L1VR_STEAM_FRAME
+static uint32_t tbxrMaxSwapchain[2];
+
+/*
+The eye image size: what the runtime recommends times a scale, held to what the view and the
+swapchain can take. The scale is vr_resolution_scale (standard.md section 9). The panel is 2160x2160
+a eye and the runtime recommends 1728, so 1.25 is native. Returns the scale that was used.
+*/
+float TBXR_SetEyeScale(float scale)
+{
+	const uint32_t recW = gAppState.ViewConfigurationView[0].recommendedImageRectWidth;
+	const uint32_t recH = gAppState.ViewConfigurationView[0].recommendedImageRectHeight;
+	uint32_t maxW = gAppState.ViewConfigurationView[0].maxImageRectWidth;
+	uint32_t maxH = gAppState.ViewConfigurationView[0].maxImageRectHeight;
+	if (tbxrMaxSwapchain[0] && (maxW == 0 || tbxrMaxSwapchain[0] < maxW)) maxW = tbxrMaxSwapchain[0];
+	if (tbxrMaxSwapchain[1] && (maxH == 0 || tbxrMaxSwapchain[1] < maxH)) maxH = tbxrMaxSwapchain[1];
+
+	if (scale < 0.5f) scale = 0.5f;
+	if (scale > 2.0f) scale = 2.0f;
+	scale *= SS_MULTIPLIER;	// 1.0 unless -s was given
+
+	uint32_t w = (uint32_t)(recW * scale + 0.5f);
+	uint32_t h = (uint32_t)(recH * scale + 0.5f);
+	if (maxW && w > maxW) w = maxW;
+	if (maxH && h > maxH) h = maxH;
+	w &= ~1u;	// even
+	h &= ~1u;
+
+	gAppState.Width = (float)w;
+	gAppState.Height = (float)h;
+	ALOGI("[openxr] eye image: recommended %ux%u, largest the view takes %ux%u (swapchain %ux%u), scale %.2f, using %ux%u",
+		  recW, recH,
+		  gAppState.ViewConfigurationView[0].maxImageRectWidth, gAppState.ViewConfigurationView[0].maxImageRectHeight,
+		  tbxrMaxSwapchain[0], tbxrMaxSwapchain[1], scale, w, h);
+	return scale;
+}
+
+/*
+Ask for the highest refresh rate the runtime offers that isn't over the setting (vr_refresh_rate). SteamVR
+offers an app only the rate set for it in its own per-app settings, so this is often the only one there is.
+*/
+static void TBXR_ChooseRefreshRate(float wanted)
+{
+	PFN_xrEnumerateDisplayRefreshRatesFB pfnEnumerateRates = NULL;
+	PFN_xrGetDisplayRefreshRateFB pfnGetRate = NULL;
+	PFN_xrRequestDisplayRefreshRateFB pfnRequestRate = NULL;
+	xrGetInstanceProcAddr(gAppState.Instance, "xrEnumerateDisplayRefreshRatesFB", (PFN_xrVoidFunction*)(&pfnEnumerateRates));
+	xrGetInstanceProcAddr(gAppState.Instance, "xrGetDisplayRefreshRateFB", (PFN_xrVoidFunction*)(&pfnGetRate));
+	xrGetInstanceProcAddr(gAppState.Instance, "xrRequestDisplayRefreshRateFB", (PFN_xrVoidFunction*)(&pfnRequestRate));
+	if (pfnEnumerateRates == NULL || pfnGetRate == NULL || pfnRequestRate == NULL)
+		return;
+
+	float rates[16];
+	uint32_t numRates = 0;
+	pfnEnumerateRates(gAppState.Session, 0, &numRates, NULL);
+	if (numRates > 16)
+		numRates = 16;
+	pfnEnumerateRates(gAppState.Session, numRates, &numRates, rates);
+
+	float best = 0.0f, lowest = 0.0f;
+	char list[160] = "";
+	for (uint32_t i = 0; i < numRates; i++)
+	{
+		char one[24];
+		snprintf(one, sizeof(one), "%s%.0f", i ? ", " : "", rates[i]);
+		strncat(list, one, sizeof(list) - strlen(list) - 1);
+		if (rates[i] <= wanted + 0.5f && rates[i] > best) best = rates[i];
+		if (lowest == 0.0f || rates[i] < lowest) lowest = rates[i];
+	}
+	if (best == 0.0f)
+		best = lowest;
+
+	float before = 0.0f;
+	pfnGetRate(gAppState.Session, &before);
+	XrResult result = XR_SUCCESS;
+	if (best > 0.0f && fabsf(best - before) > 0.5f)
+		result = pfnRequestRate(gAppState.Session, best);
+	float after = 0.0f;
+	pfnGetRate(gAppState.Session, &after);
+	ALOGI("[openxr] refresh rate: offered %s Hz, wanted %.0f, asked for %.0f (now %.1f, was %.1f, result %d)",
+		  list, wanted, best, after, before, (int)result);
+	gAppState.currentDisplayRefreshRate = after;
+}
+#endif
+
 void TBXR_InitialiseResolution()
 {
 	// Enumerate the viewport configurations.
@@ -1723,30 +1808,10 @@ void TBXR_InitRenderer(  ) {
     }
 
 #ifdef L1VR_STEAM_FRAME
-	//Just look at the refresh rate, SteamVR only offers the one set for the app
+	//Pick a refresh rate, SteamVR only offers the one set for the app
 	if (TBXR_ExtensionEnabled(XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME))
 	{
-		PFN_xrEnumerateDisplayRefreshRatesFB pfnEnumerateRates = NULL;
-		PFN_xrGetDisplayRefreshRateFB pfnGetRate = NULL;
-		xrGetInstanceProcAddr(gAppState.Instance, "xrEnumerateDisplayRefreshRatesFB", (PFN_xrVoidFunction*)(&pfnEnumerateRates));
-		xrGetInstanceProcAddr(gAppState.Instance, "xrGetDisplayRefreshRateFB", (PFN_xrVoidFunction*)(&pfnGetRate));
-		if (pfnEnumerateRates != NULL && pfnGetRate != NULL)
-		{
-			float rates[16];
-			uint32_t numRates = 0;
-			pfnEnumerateRates(gAppState.Session, 0, &numRates, NULL);
-			if (numRates > 16)
-			{
-				numRates = 16;
-			}
-			pfnEnumerateRates(gAppState.Session, numRates, &numRates, rates);
-			for (uint32_t i = 0; i < numRates; i++)
-			{
-				ALOGI("[openxr] display refresh rate offered: %.1f Hz", rates[i]);
-			}
-			pfnGetRate(gAppState.Session, &gAppState.currentDisplayRefreshRate);
-			ALOGI("[openxr] display refresh rate now: %.1f Hz", gAppState.currentDisplayRefreshRate);
-		}
+		TBXR_ChooseRefreshRate(vr_refresh_rate != NULL ? vr_refresh_rate->value : 90.0f);
 	}
 #endif
 
@@ -1934,6 +1999,8 @@ void TBXR_InitialiseOpenXR()
 		XrSystemProperties systemProperties = {};
 		systemProperties.type = XR_TYPE_SYSTEM_PROPERTIES;
 		OXR(xrGetSystemProperties(gAppState.Instance, gAppState.SystemId, &systemProperties));
+		tbxrMaxSwapchain[0] = systemProperties.graphicsProperties.maxSwapchainImageWidth;
+		tbxrMaxSwapchain[1] = systemProperties.graphicsProperties.maxSwapchainImageHeight;
 		ALOGI("[openxr] system: %s, OpenGL ES %d.%d to %d.%d wanted by the runtime",
 			  systemProperties.systemName,
 			  XR_VERSION_MAJOR(graphicsRequirements.minApiVersionSupported),

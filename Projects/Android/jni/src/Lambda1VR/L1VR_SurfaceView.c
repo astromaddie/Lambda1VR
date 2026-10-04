@@ -500,6 +500,8 @@ convar_t	*vr_use_gesture_boundary;
 #ifdef L1VR_STEAM_FRAME
 convar_t	*vr_hud_distance;
 convar_t	*vr_hud_level;
+convar_t	*vr_refresh_rate;
+convar_t	*vr_resolution_scale;
 #endif
 
 
@@ -580,6 +582,8 @@ void VR_Init()
         }
     }
     vr_hud_distance = Cvar_Get( "vr_hud_distance", "1.0", CVAR_ARCHIVE, "How far ahead the HUD sits, in metres" );
+    vr_refresh_rate = Cvar_Get( "vr_refresh_rate", "90", CVAR_ARCHIVE, "The display refresh rate to ask for, the highest the runtime offers that isn't over this" );
+    vr_resolution_scale = Cvar_Get( "vr_resolution_scale", "1.25", CVAR_ARCHIVE, "Eye image size as a multiple of the runtime's recommended one (1.25 is the panel's 2160 on the Steam Frame), 0.5 to 2" );
     vr_hud_level = Cvar_Get( "vr_hud_level", "1", CVAR_ARCHIVE, "1 keeps the HUD, text, and camera-facing sprites level when the head rolls, 0 lets them roll with the head" );
 #endif
 
@@ -664,6 +668,14 @@ void * AppThreadFunction( void * parm )
 	VR_Init();
 
 	TBXR_EnterVR();
+#ifdef L1VR_STEAM_FRAME
+	{
+		// the eye image size, from vr_resolution_scale (the engine set up its screen before it was known)
+		extern void R_ChangeDisplaySettingsFast( int width, int height );
+		TBXR_SetEyeScale( vr_resolution_scale->value );
+		R_ChangeDisplaySettingsFast( (int)gAppState.Width, (int)gAppState.Height );
+	}
+#endif
 	TBXR_InitRenderer();
 	TBXR_InitActions();
 	TBXR_WaitForSessionActive();
@@ -687,15 +699,16 @@ void * AppThreadFunction( void * parm )
 			{
 				//The positional movement scaling goes by vr_refresh. SteamVR picks the rate for
 				//the app, so take it from the frame period rather than from what's on offer.
-				static bool refreshSet = false;
+				static int lastRate = 0;
 				const XrDuration period = gAppState.FrameState.predictedDisplayPeriod;
-				if (!refreshSet && period > 0)
+				const int rate = period > 0 ? (int)(1e9 / (double)period + 0.5) : 0;
+				if (rate > 0 && rate != lastRate)
 				{
-					char rate[16];
-					Q_snprintf(rate, sizeof(rate), "%d", (int)(1e9 / (double)period + 0.5));
-					Cvar_Set2("vr_refresh", rate, true);
-					ALOGI("[openxr] frame period %.2f ms, vr_refresh %s", period / 1e6, rate);
-					refreshSet = true;
+					char text[16];
+					Q_snprintf(text, sizeof(text), "%d", rate);
+					Cvar_Set2("vr_refresh", text, true);
+					ALOGI("[openxr] frame period %.2f ms, vr_refresh %s", period / 1e6, text);
+					lastRate = rate;
 				}
 			}
 			if (!TBXR_ShouldRender())
