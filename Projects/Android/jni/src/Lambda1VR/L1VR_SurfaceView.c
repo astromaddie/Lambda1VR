@@ -28,6 +28,13 @@
 //Let's go to the maximum!
 extern float SS_MULTIPLIER;
 
+//Where the game data is, the same folder the Java side uses
+#ifdef L1VR_STEAM_FRAME
+#define L1VR_DATA_DIR "/sdcard/Documents/Lambda1VR"
+#else
+#define L1VR_DATA_DIR "/sdcard/xash"
+#endif
+
 /* global arg_xxx structs */
 struct arg_dbl *ss;
 struct arg_int *cpu;
@@ -550,7 +557,7 @@ void * AppThreadFunction( void * parm )
 	TBXR_WaitForSessionActive();
 
 	//Always use this folder
-	chdir("/sdcard/xash");
+	chdir(L1VR_DATA_DIR);
 
 	bool destroyed = false;
 	while (!destroyed)

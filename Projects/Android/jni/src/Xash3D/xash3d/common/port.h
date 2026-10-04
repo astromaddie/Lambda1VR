@@ -69,7 +69,11 @@ GNU General Public License for more details.
 		#define MENUDLL   "libmenu"   POSTFIX "." OS_LIB_EXT
 		#define CLIENTDLL "libclient" POSTFIX "." OS_LIB_EXT
 		#define SERVERDLL "libserver" POSTFIX "." OS_LIB_EXT
+		#ifdef L1VR_STEAM_FRAME
+		#define GAMEPATH "/sdcard/Documents/Lambda1VR"
+		#else
 		#define GAMEPATH "/sdcard/xash"
+		#endif
 	#elif defined(__SAILFISH__)
 		#define POSTFIX
 		// don't change these names

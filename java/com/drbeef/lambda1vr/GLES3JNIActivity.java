@@ -16,6 +16,7 @@ import java.util.Locale;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -75,6 +76,10 @@ import static android.system.Os.setenv;
 
 	private static final String TAG = "Lambda1VR";
 
+	//Where the game data lives. On the Frame it's in Documents, which is the
+	//headset's own folder and survives a reset of the Android container.
+	private static final String DATA_DIR = BuildConfig.STEAM_FRAME ? "/sdcard/Documents/Lambda1VR/" : "/sdcard/xash/";
+
 	private static final int REQUEST_MANAGE_ALL_FILES = 2296;
 
 
@@ -102,13 +107,32 @@ import static android.system.Os.setenv;
 	}
 
 	/** Initializes the Activity only if the permission has been granted. */
+	private boolean canUseStorage() {
+		if (Environment.isExternalStorageManager()) {
+			return true;
+		}
+
+		if (BuildConfig.STEAM_FRAME) {
+			//The container on the Frame has no settings page for this, and the folder is
+			//plain files from the host, so all that matters is if we can write to it
+			File dir = new File(DATA_DIR);
+			return (dir.isDirectory() || dir.mkdirs()) && dir.canWrite();
+		}
+
+		return false;
+	}
+
 	private void checkPermissionsAndInitialize() {
-		if (!Environment.isExternalStorageManager()) {
+		if (!canUseStorage()) {
 			//request for the permission
 			Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
 			Uri uri = Uri.fromParts("package", getPackageName(), null);
 			intent.setData(uri);
-			startActivityForResult(intent, REQUEST_MANAGE_ALL_FILES);
+			try {
+				startActivityForResult(intent, REQUEST_MANAGE_ALL_FILES);
+			} catch (ActivityNotFoundException e) {
+				Log.e(TAG, "No settings page for the all files permission, and " + DATA_DIR + " can't be written");
+			}
 
 			finishAffinity(); // Cleanly exit
 
@@ -130,18 +154,18 @@ import static android.system.Os.setenv;
 	public void create()
 	{
 		copy_asset(getFilesDir().getPath(), "extras.pak", false);
-		copy_asset("/sdcard/xash/", "commandline.txt", false); // Copy in case user has deleted their config
+		copy_asset(DATA_DIR, "commandline.txt", false); // Copy in case user has deleted their config
 
 
 		//Read these from a file and pass through
 		commandLineParams = new String("xash3d -dev 3 -log");
 
 		//See if user is trying to use command line params
-		if(new File("/sdcard/xash/commandline.txt").exists()) // should exist!
+		if(new File(DATA_DIR + "commandline.txt").exists()) // should exist!
 		{
 			BufferedReader br;
 			try {
-				br = new BufferedReader(new FileReader("/sdcard/xash/commandline.txt"));
+				br = new BufferedReader(new FileReader(DATA_DIR + "commandline.txt"));
 				String s;
 				StringBuilder sb=new StringBuilder(0);
 				while ((s=br.readLine())!=null)
@@ -172,319 +196,319 @@ import static android.system.Os.setenv;
 		}
 
 		//game configuration
-		copy_asset("/sdcard/xash/" + game + "/", "config.cfg", false); // Copy in case user has deleted their config
+		copy_asset(DATA_DIR + game + "/", "config.cfg", false); // Copy in case user has deleted their config
 
 		//special commands
-		copy_asset("/sdcard/xash/" + game + "/", "commands.lst", false); // Copy in case user has deleted their config
+		copy_asset(DATA_DIR + game + "/", "commands.lst", false); // Copy in case user has deleted their config
 
 		//Copy our special stuff
-		copy_asset("/sdcard/xash/" + game + "/", "sprites/s_stealth.spr", true);
-		copy_asset("/sdcard/xash/" + game + "/", "sprites/vignette.tga", true);
-		copy_asset("/sdcard/xash/valve/", "sprites/vignette.tga", true); //seems to need to be here for some people
+		copy_asset(DATA_DIR + game + "/", "sprites/s_stealth.spr", true);
+		copy_asset(DATA_DIR + game + "/", "sprites/vignette.tga", true);
+		copy_asset(DATA_DIR + "valve/", "sprites/vignette.tga", true); //seems to need to be here for some people
 
 		//Menu Arrow
-		copy_asset("/sdcard/xash/" + game + "/", "sprites/pointer.tga", true);
-		copy_asset("/sdcard/xash/valve/", "sprites/pointer.tga", true);
+		copy_asset(DATA_DIR + game + "/", "sprites/pointer.tga", true);
+		copy_asset(DATA_DIR + "valve/", "sprites/pointer.tga", true);
 
 		//Menu Background
-		copy_asset("/sdcard/xash/valve/resource/", "background/800_1_a_loading.tga", true);
-		copy_asset("/sdcard/xash/valve/resource/", "background/800_1_b_loading.tga", true);
-		copy_asset("/sdcard/xash/valve/resource/", "background/800_1_c_loading.tga", true);
-		copy_asset("/sdcard/xash/valve/resource/", "background/800_1_d_loading.tga", true);
-		copy_asset("/sdcard/xash/valve/resource/", "background/800_2_a_loading.tga", true);
-		copy_asset("/sdcard/xash/valve/resource/", "background/800_2_b_loading.tga", true);
-		copy_asset("/sdcard/xash/valve/resource/", "background/800_2_c_loading.tga", true);
-		copy_asset("/sdcard/xash/valve/resource/", "background/800_2_d_loading.tga", true);
-		copy_asset("/sdcard/xash/valve/resource/", "background/800_3_a_loading.tga", true);
-		copy_asset("/sdcard/xash/valve/resource/", "background/800_3_b_loading.tga", true);
-		copy_asset("/sdcard/xash/valve/resource/", "background/800_3_c_loading.tga", true);
-		copy_asset("/sdcard/xash/valve/resource/", "background/800_3_d_loading.tga", true);
+		copy_asset(DATA_DIR + "valve/resource/", "background/800_1_a_loading.tga", true);
+		copy_asset(DATA_DIR + "valve/resource/", "background/800_1_b_loading.tga", true);
+		copy_asset(DATA_DIR + "valve/resource/", "background/800_1_c_loading.tga", true);
+		copy_asset(DATA_DIR + "valve/resource/", "background/800_1_d_loading.tga", true);
+		copy_asset(DATA_DIR + "valve/resource/", "background/800_2_a_loading.tga", true);
+		copy_asset(DATA_DIR + "valve/resource/", "background/800_2_b_loading.tga", true);
+		copy_asset(DATA_DIR + "valve/resource/", "background/800_2_c_loading.tga", true);
+		copy_asset(DATA_DIR + "valve/resource/", "background/800_2_d_loading.tga", true);
+		copy_asset(DATA_DIR + "valve/resource/", "background/800_3_a_loading.tga", true);
+		copy_asset(DATA_DIR + "valve/resource/", "background/800_3_b_loading.tga", true);
+		copy_asset(DATA_DIR + "valve/resource/", "background/800_3_c_loading.tga", true);
+		copy_asset(DATA_DIR + "valve/resource/", "background/800_3_d_loading.tga", true);
 
 
 		//Copy modified weapon models - This is the base set
-		if (!(new File("/sdcard/xash/" + game + "/models/no_copy").exists()) && !(game.equalsIgnoreCase("Hunger")))
+		if (!(new File(DATA_DIR + game + "/models/no_copy").exists()) && !(game.equalsIgnoreCase("Hunger")))
 		{
 			//Colt (A-16)
-			copy_asset("/sdcard/xash/" + game + "/", "models/v_9mmar.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/p_9mmar.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/w_9mmar.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/items/clipinsert1.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/items/cliprelease1.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/t_m4_boltpull.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/t_m4_deploy.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/t_m4_m203_in.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/t_m4_m203_out.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/t_m4_m203_shell.wav", true);
+			copy_asset(DATA_DIR + game + "/", "models/v_9mmar.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/p_9mmar.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/w_9mmar.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "sound/items/clipinsert1.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/items/cliprelease1.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/t_m4_boltpull.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/t_m4_deploy.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/t_m4_m203_in.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/t_m4_m203_out.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/t_m4_m203_shell.wav", true);
 
 			//Colt Pistol M1911
-			copy_asset("/sdcard/xash/" + game + "/", "models/v_9mmhandgun.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/p_9mmhandgun.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/w_9mmhandgun.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/glock_magin.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/glock_magout.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/glock_slideforward.wav", true);
+			copy_asset(DATA_DIR + game + "/", "models/v_9mmhandgun.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/p_9mmhandgun.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/w_9mmhandgun.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/glock_magin.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/glock_magout.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/glock_slideforward.wav", true);
 
 			//357 Python
-			copy_asset("/sdcard/xash/" + game + "/", "models/v_357.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/p_357.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/w_357.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/357_shot1.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/357_shot2.wav", true);
+			copy_asset(DATA_DIR + game + "/", "models/v_357.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/p_357.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/w_357.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/357_shot1.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/357_shot2.wav", true);
 
 			//RGD Grenade
-			copy_asset("/sdcard/xash/" + game + "/", "models/v_grenade.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/w_grenade.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/p_grenade.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/grenade_pinpull.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/grenade_throw.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/grenade_draw.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/explode3.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/explode4.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/explode5.wav", true);
+			copy_asset(DATA_DIR + game + "/", "models/v_grenade.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/w_grenade.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/p_grenade.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/grenade_pinpull.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/grenade_throw.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/grenade_draw.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/explode3.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/explode4.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/explode5.wav", true);
 
 			//Shotgun Benelli M3
-			copy_asset("/sdcard/xash/" + game + "/", "models/v_shotgun.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/p_shotgun.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/w_shotgun.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/m3_insertshell.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/m3_pump.wav", true);
+			copy_asset(DATA_DIR + game + "/", "models/v_shotgun.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/p_shotgun.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/w_shotgun.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/m3_insertshell.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/m3_pump.wav", true);
 
 			//Stalker Rocket
-			copy_asset("/sdcard/xash/" + game + "/", "models/v_rpg.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/p_rpg.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/w_rpg.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/rpgrocket.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/v_rpgammo.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/rocket1.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/rocketfire1.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/rpg7_reload.wav", true);
+			copy_asset(DATA_DIR + game + "/", "models/v_rpg.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/p_rpg.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/w_rpg.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/rpgrocket.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/v_rpgammo.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/rocket1.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/rocketfire1.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/rpg7_reload.wav", true);
 
 			//Satchel
-			copy_asset("/sdcard/xash/" + game + "/", "models/v_satchel.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/v_satchel_radio.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/w_satchel.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/p_satchel.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/p_satchel_radio.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/v_satchel.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/v_satchel_radio.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/w_satchel.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/p_satchel.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/p_satchel_radio.mdl", true);
 
 			//Tripmine
-			copy_asset("/sdcard/xash/" + game + "/", "models/v_tripmine.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/p_tripmine.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/mine_activate.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/mine_deploy.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/tripmine_ant.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/tripmine_button.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/tripmine_move.wav", true);
+			copy_asset(DATA_DIR + game + "/", "models/v_tripmine.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/p_tripmine.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/mine_activate.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/mine_deploy.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/tripmine_ant.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/tripmine_button.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/tripmine_move.wav", true);
 
 			//BMS Crossbow
-			copy_asset("/sdcard/xash/" + game + "/", "models/v_crossbow.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/p_crossbow.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/w_crossbow.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/w_crossbow_clip.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/natianul.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/xbow.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/xbow_fire1.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/xbow_reload1.wav", true);
+			copy_asset(DATA_DIR + game + "/", "models/v_crossbow.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/p_crossbow.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/w_crossbow.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/w_crossbow_clip.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/natianul.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/xbow.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/xbow_fire1.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/xbow_reload1.wav", true);
 
 
 			//Egon (Overhaul)
-			copy_asset("/sdcard/xash/" + game + "/", "models/v_egon.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/p_egon.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/w_egon.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/v_egon.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/p_egon.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/w_egon.mdl", true);
 
 			//Gauss (Overhaul)
-			copy_asset("/sdcard/xash/" + game + "/", "models/v_gauss.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/p_gauss.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/w_gauss.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/w_gaussammo.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/v_gauss.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/p_gauss.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/w_gauss.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/w_gaussammo.mdl", true);
 
 			//HGun (Overhaul)
-			copy_asset("/sdcard/xash/" + game + "/", "models/v_hgun.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/p_hgun.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/w_hgun.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/v_hgun.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/p_hgun.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/w_hgun.mdl", true);
 
 			//Squeak (Overhaul)
-			copy_asset("/sdcard/xash/" + game + "/", "models/v_squeak.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/p_squeak.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/w_squeak.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/w_sqknest.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/v_squeak.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/p_squeak.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/w_squeak.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/w_sqknest.mdl", true);
 
 			//Crowbar
-			copy_asset("/sdcard/xash/" + game + "/", "models/v_crowbar.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/w_crowbar.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/cbar_draw.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/cbar_hit1.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/cbar_hit2.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/cbar_hitbod1.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/cbar_hitbod2.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/cbar_hitbod3.wav", true);
-			copy_asset("/sdcard/xash/" + game + "/", "sound/weapons/cbar_miss1.wav", true);
+			copy_asset(DATA_DIR + game + "/", "models/v_crowbar.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/w_crowbar.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/cbar_draw.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/cbar_hit1.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/cbar_hit2.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/cbar_hitbod1.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/cbar_hitbod2.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/cbar_hitbod3.wav", true);
+			copy_asset(DATA_DIR + game + "/", "sound/weapons/cbar_miss1.wav", true);
 
-			copy_asset("/sdcard/xash/" + game + "/", "models/v_torch.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "models/v_hand.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/v_torch.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "models/v_hand.mdl", true);
 		}
 
 		//Copy Opposing Force specific models
 		if (game.equalsIgnoreCase("gearbox") &&
-				!(new File("/sdcard/xash/" + game + "/models/no_copy").exists()))
+				!(new File(DATA_DIR + game + "/models/no_copy").exists()))
 		{
 			//Scope vignette texture
-			copy_asset("/sdcard/xash/" + game + "/", "sprites/scope.tga", true);
-			copy_asset("/sdcard/xash/valve/", "sprites/scope.tga", true);
+			copy_asset(DATA_DIR + game + "/", "sprites/scope.tga", true);
+			copy_asset(DATA_DIR + "valve/", "sprites/scope.tga", true);
 
 			//Sniper Rifle
-			copy_asset("/sdcard/xash/", "gearbox/models/v_m40a1.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/w_m40a1.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/scout_clipin.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/scout_clipout.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/sniper_fire.wav", true);
+			copy_asset(DATA_DIR, "gearbox/models/v_m40a1.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/w_m40a1.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/scout_clipin.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/scout_clipout.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/sniper_fire.wav", true);
 
 			//Pipe Wrench
-			copy_asset("/sdcard/xash/", "gearbox/models/v_pipe_wrench.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/w_pipe_wrench.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/p_pipe_wrench.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/v_pipe_wrench.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/w_pipe_wrench.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/p_pipe_wrench.mdl", true);
 
 			//Penguins
-			new File("/sdcard/xash/gearbox/sound/penguin/").mkdirs(); // Make the penguin directory as it won't exist
-			copy_asset("/sdcard/xash/", "gearbox/sound/penguin/penguin_die1.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/penguin/penguin_deploy1.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/penguin/penguin_hunt1.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/penguin/penguin_hunt2.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/penguin/penguin_hunt3.wav", true);
+			new File(DATA_DIR + "gearbox/sound/penguin/").mkdirs(); // Make the penguin directory as it won't exist
+			copy_asset(DATA_DIR, "gearbox/sound/penguin/penguin_die1.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/penguin/penguin_deploy1.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/penguin/penguin_hunt1.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/penguin/penguin_hunt2.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/penguin/penguin_hunt3.wav", true);
 
 			//Knife
-			copy_asset("/sdcard/xash/", "gearbox/models/v_knife.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/w_knife.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/p_knife.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/v_knife.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/w_knife.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/p_knife.mdl", true);
 
 			//Desert Eagle
-			copy_asset("/sdcard/xash/", "gearbox/models/v_desert_eagle.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/w_desert_eagle.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/v_desert_eagle.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/w_desert_eagle.mdl", true);
 
 			//Saw
-			copy_asset("/sdcard/xash/", "gearbox/models/v_saw.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/p_saw.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/w_saw.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/w_saw_clip.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/saw_link.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/saw_shell.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/SAW_bolt.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/saw_fire1.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/saw_fire2.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/saw_fire3.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/saw_reload_new.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/saw_reload2_new.wav", true);
+			copy_asset(DATA_DIR, "gearbox/models/v_saw.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/p_saw.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/w_saw.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/w_saw_clip.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/saw_link.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/saw_shell.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/SAW_bolt.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/saw_fire1.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/saw_fire2.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/saw_fire3.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/saw_reload_new.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/saw_reload2_new.wav", true);
 
 			//Barnacle
-			copy_asset("/sdcard/xash/", "gearbox/models/v_bgrap.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/p_bgrap.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/w_bgrap.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/v_bgrap_tonguetip.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/saw_link.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/saw_shell.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/bgrapple_cough.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/bgrapple_fire.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/bgrapple_impact.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/bgrapple_pull.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/bgrapple_release.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/bgrapple_wait.wav", true);
+			copy_asset(DATA_DIR, "gearbox/models/v_bgrap.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/p_bgrap.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/w_bgrap.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/v_bgrap_tonguetip.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/saw_link.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/saw_shell.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/bgrapple_cough.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/bgrapple_fire.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/bgrapple_impact.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/bgrapple_pull.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/bgrapple_release.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/bgrapple_wait.wav", true);
 
 			//Shock
-			copy_asset("/sdcard/xash/", "gearbox/models/v_shock.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/v_shock.mdl", true);
 
 			//Pingu
-			copy_asset("/sdcard/xash/", "gearbox/models/v_penguin.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/v_penguin.mdl", true);
 
 			//Spore
-			copy_asset("/sdcard/xash/", "gearbox/models/v_spore_launcher.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/w_spore_launcher.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/spore.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/spore_ammo.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/splauncher_bounce.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/splauncher_impact.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/spore_hit1.wav", true);
+			copy_asset(DATA_DIR, "gearbox/models/v_spore_launcher.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/w_spore_launcher.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/spore.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/spore_ammo.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/splauncher_bounce.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/splauncher_impact.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/spore_hit1.wav", true);
 
 			//Displacer
-			copy_asset("/sdcard/xash/", "gearbox/models/v_displacer.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/w_displacer.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/models/p_displacer.mdl", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/displacer_fire.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/displacer_impact.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/displacer_self.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/displacer_spin.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/displacer_spin2.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/displacer_start.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/displacer_teleport.wav", true);
-			copy_asset("/sdcard/xash/", "gearbox/sound/weapons/displacer_teleport_player.wav", true);
+			copy_asset(DATA_DIR, "gearbox/models/v_displacer.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/w_displacer.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/p_displacer.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/displacer_fire.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/displacer_impact.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/displacer_self.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/displacer_spin.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/displacer_spin2.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/displacer_start.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/displacer_teleport.wav", true);
+			copy_asset(DATA_DIR, "gearbox/sound/weapons/displacer_teleport_player.wav", true);
 
 			//Hand
-			copy_asset("/sdcard/xash/", "gearbox/models/v_hand.mdl", true);
+			copy_asset(DATA_DIR, "gearbox/models/v_hand.mdl", true);
 		}
 
 		//Copy Blue Shift specific models
 		if (game.equalsIgnoreCase("bshift") &&
-				!(new File("/sdcard/xash/" + game + "/models/no_copy").exists()))
+				!(new File(DATA_DIR + game + "/models/no_copy").exists()))
 		{
-			copy_asset("/sdcard/xash/", "bshift/models/v_hand.mdl", true);
+			copy_asset(DATA_DIR, "bshift/models/v_hand.mdl", true);
 		}
 		
 		//Copy They Hunger specific models
 		if (game.equalsIgnoreCase("Hunger") &&
-				!(new File("/sdcard/xash/" + game + "/models/no_copy").exists()))
+				!(new File(DATA_DIR + game + "/models/no_copy").exists()))
 		{
 			//HL1 models
-			copy_asset("/sdcard/xash/" + game + "/", "/models/v_rpg.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "/models/v_357.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "/models/v_satchel.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "/models/v_satchel_radio.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "/models/v_tripmine.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "/models/v_crossbow.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "/models/v_gauss.mdl", true);
-			copy_asset("/sdcard/xash/" + game + "/", "/models/v_squeak.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "/models/v_rpg.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "/models/v_357.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "/models/v_satchel.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "/models/v_satchel_radio.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "/models/v_tripmine.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "/models/v_crossbow.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "/models/v_gauss.mdl", true);
+			copy_asset(DATA_DIR + game + "/", "/models/v_squeak.mdl", true);
 			
 			//They Hunger models
-			copy_asset("/sdcard/xash/", "Hunger/models/v_9mmar.mdl", true);
-			copy_asset("/sdcard/xash/", "Hunger/models/v_9mmhandgun.mdl", true);
-			copy_asset("/sdcard/xash/", "Hunger/models/v_ap9.mdl", true);
-			copy_asset("/sdcard/xash/", "Hunger/models/v_crowbar.mdl", true);
-			copy_asset("/sdcard/xash/", "Hunger/models/v_egon.mdl", true);
-			copy_asset("/sdcard/xash/", "Hunger/models/v_hkg36.mdl", true);
-			copy_asset("/sdcard/xash/", "Hunger/models/v_shotgun.mdl", true);
-			copy_asset("/sdcard/xash/", "Hunger/models/v_shovel.mdl", true);
-			copy_asset("/sdcard/xash/", "Hunger/models/v_taurus.mdl", true);
-			copy_asset("/sdcard/xash/", "Hunger/models/v_tfac.mdl", true);
-			copy_asset("/sdcard/xash/", "Hunger/models/v_tfc_medkit.mdl", true);
-			copy_asset("/sdcard/xash/", "Hunger/models/v_tfc_sniper.mdl", true);
-			copy_asset("/sdcard/xash/", "Hunger/models/v_tfc_spanner.mdl", true);
-			copy_asset("/sdcard/xash/", "Hunger/models/v_tnt.mdl", true);
-			copy_asset("/sdcard/xash/", "Hunger/models/v_hand.mdl", true);
+			copy_asset(DATA_DIR, "Hunger/models/v_9mmar.mdl", true);
+			copy_asset(DATA_DIR, "Hunger/models/v_9mmhandgun.mdl", true);
+			copy_asset(DATA_DIR, "Hunger/models/v_ap9.mdl", true);
+			copy_asset(DATA_DIR, "Hunger/models/v_crowbar.mdl", true);
+			copy_asset(DATA_DIR, "Hunger/models/v_egon.mdl", true);
+			copy_asset(DATA_DIR, "Hunger/models/v_hkg36.mdl", true);
+			copy_asset(DATA_DIR, "Hunger/models/v_shotgun.mdl", true);
+			copy_asset(DATA_DIR, "Hunger/models/v_shovel.mdl", true);
+			copy_asset(DATA_DIR, "Hunger/models/v_taurus.mdl", true);
+			copy_asset(DATA_DIR, "Hunger/models/v_tfac.mdl", true);
+			copy_asset(DATA_DIR, "Hunger/models/v_tfc_medkit.mdl", true);
+			copy_asset(DATA_DIR, "Hunger/models/v_tfc_sniper.mdl", true);
+			copy_asset(DATA_DIR, "Hunger/models/v_tfc_spanner.mdl", true);
+			copy_asset(DATA_DIR, "Hunger/models/v_tnt.mdl", true);
+			copy_asset(DATA_DIR, "Hunger/models/v_hand.mdl", true);
 		}
 		
 		//Copy Afraid of Monsters Director's Cut specific models
 		if (game.equalsIgnoreCase("AoMDC") &&
-				!(new File("/sdcard/xash/" + game + "/models/no_copy").exists()))
+				!(new File(DATA_DIR + game + "/models/no_copy").exists()))
 		{
 			//Afraid of Monsters Director's Cut models
-			copy_asset("/sdcard/xash/", "AoMDC/models/v_axe.mdl", true);
-			copy_asset("/sdcard/xash/", "AoMDC/models/v_beretta.mdl", true);
-			copy_asset("/sdcard/xash/", "AoMDC/models/v_deagle.mdl", true);
-			copy_asset("/sdcard/xash/", "AoMDC/models/v_glock.mdl", true);
-			copy_asset("/sdcard/xash/", "AoMDC/models/v_hammer.mdl", true);
-			copy_asset("/sdcard/xash/", "AoMDC/models/v_hand.mdl", true);
-			copy_asset("/sdcard/xash/", "AoMDC/models/v_kitchenknife.mdl", true);
-			copy_asset("/sdcard/xash/", "AoMDC/models/v_mp5k.mdl", true);
-			copy_asset("/sdcard/xash/", "AoMDC/models/v_p228.mdl", true);
-			copy_asset("/sdcard/xash/", "AoMDC/models/v_revolver.mdl", true);
-			copy_asset("/sdcard/xash/", "AoMDC/models/v_shotgun.mdl", true);
-			copy_asset("/sdcard/xash/", "AoMDC/models/v_spear.mdl", true);
-			copy_asset("/sdcard/xash/", "AoMDC/models/v_torch.mdl", true);
-			copy_asset("/sdcard/xash/", "AoMDC/models/v_uzi.mdl", true);
-			copy_asset("/sdcard/xash/", "AoMDC/models/gmgeneral_display.aomdc", true);
+			copy_asset(DATA_DIR, "AoMDC/models/v_axe.mdl", true);
+			copy_asset(DATA_DIR, "AoMDC/models/v_beretta.mdl", true);
+			copy_asset(DATA_DIR, "AoMDC/models/v_deagle.mdl", true);
+			copy_asset(DATA_DIR, "AoMDC/models/v_glock.mdl", true);
+			copy_asset(DATA_DIR, "AoMDC/models/v_hammer.mdl", true);
+			copy_asset(DATA_DIR, "AoMDC/models/v_hand.mdl", true);
+			copy_asset(DATA_DIR, "AoMDC/models/v_kitchenknife.mdl", true);
+			copy_asset(DATA_DIR, "AoMDC/models/v_mp5k.mdl", true);
+			copy_asset(DATA_DIR, "AoMDC/models/v_p228.mdl", true);
+			copy_asset(DATA_DIR, "AoMDC/models/v_revolver.mdl", true);
+			copy_asset(DATA_DIR, "AoMDC/models/v_shotgun.mdl", true);
+			copy_asset(DATA_DIR, "AoMDC/models/v_spear.mdl", true);
+			copy_asset(DATA_DIR, "AoMDC/models/v_torch.mdl", true);
+			copy_asset(DATA_DIR, "AoMDC/models/v_uzi.mdl", true);
+			copy_asset(DATA_DIR, "AoMDC/models/gmgeneral_display.aomdc", true);
 		}
 
 		//Set default environment
 		try {
 			ApplicationInfo info = getApplicationInfo();
-			setenv("XASH3D_BASEDIR", "/sdcard/xash/", true);
+			setenv("XASH3D_BASEDIR", DATA_DIR, true);
 			setenv("XASH3D_GAMELIBDIR", info.nativeLibraryDir, true);
 			setenv("XASH3D_GAMEDIR", "valve", true);
 			setenv( "XASH3D_EXTRAS_PAK1", getFilesDir().getPath() + "/extras.pak", true );
