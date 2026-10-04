@@ -144,6 +144,10 @@ void interactWithTouchScreen(ovrTrackedController *tracking, ovrInputStateTracke
 
     float cursorX = -sinf(DEG2RAD(remoteAngles[YAW] - playerYaw)) + 0.5f;
     float cursorY = (float)(remoteAngles[PITCH] / 90.0) + 0.5f;
+#ifdef L1VR_STEAM_FRAME
+    // the cursor is where the hand's ray meets the screen, the same place the laser ends
+    TBXR_ScreenPointer(&cursorX, &cursorY);
+#endif
     touchEventType t = event_motion;
     if (newRemoteTrigState != prevRemoteTrigState)
     {

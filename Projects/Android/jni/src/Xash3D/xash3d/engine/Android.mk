@@ -189,9 +189,11 @@ LOCAL_SRC_FILES := \
 ifeq ($(L1VR_STEAM_FRAME),1)
 LAMBDA1VR_SRC_FILES += $(LOCAL_PATH)/../../../Lambda1VR/VrEyeMath.c \
 		   $(LOCAL_PATH)/../../../Lambda1VR/VrFrameMap.c \
+		   $(LOCAL_PATH)/../../../Lambda1VR/VrPointerMath.c \
 		   $(LOCAL_PATH)/../../../Lambda1VR/VrInputFrame.c
 LOCAL_SRC_FILES += $(LOCAL_PATH)/../../../Lambda1VR/VrEyeMath.c \
 		   $(LOCAL_PATH)/../../../Lambda1VR/VrFrameMap.c \
+		   $(LOCAL_PATH)/../../../Lambda1VR/VrPointerMath.c \
 		   $(LOCAL_PATH)/../../../Lambda1VR/VrInputFrame.c
 endif
 

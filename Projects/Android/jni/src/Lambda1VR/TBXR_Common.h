@@ -38,7 +38,12 @@
 #define ALOGV(...)
 #endif
 
+#ifdef L1VR_STEAM_FRAME
+// the projection or menu layer, then the menu laser's beam and its dot
+enum { ovrMaxLayerCount = 3 };
+#else
 enum { ovrMaxLayerCount = 1 };
+#endif
 enum { ovrMaxNumEyes = 2 };
 
 typedef enum xrButton_ {
@@ -363,6 +368,10 @@ void TBXR_submitFrame();
 bool TBXR_ExtensionEnabled(const char* name);
 bool TBXR_ShouldRender();
 void TBXR_RecenterToHead(bool resetHeight);
+
+// The menu laser: where the weapon hand's aim ray meets the flat screen, 0..1 across and down. False
+// when the screen isn't showing or the hand isn't tracked (the ray can also miss the panel's edge).
+bool TBXR_ScreenPointer(float* u, float* v);
 #endif
 
 #endif //vrcommon_h

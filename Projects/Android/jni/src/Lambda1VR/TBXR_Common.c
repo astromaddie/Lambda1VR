@@ -14,6 +14,8 @@
 #include "VrCommon.h"
 #ifdef L1VR_STEAM_FRAME
 #include "VrEyeMath.h"
+#include "VrPointerMath.h"
+#include "VrCvars.h"
 #endif
 
 #include <EGL/egl.h>
@@ -513,6 +515,11 @@ typedef struct {
 	void (GL_APIENTRYP GenRenderbuffers)(GLsizei n, GLuint* renderbuffers);
 	void (GL_APIENTRYP BindRenderbuffer)(GLenum target, GLuint renderbuffer);
 	void (GL_APIENTRYP RenderbufferStorage)(GLenum target, GLenum internalformat, GLsizei width, GLsizei height);
+	void (GL_APIENTRYP GenFramebuffers)(GLsizei n, GLuint* framebuffers);
+	void (GL_APIENTRYP BindFramebuffer)(GLenum target, GLuint framebuffer);
+	void (GL_APIENTRYP ClearColor)(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha);
+	void (GL_APIENTRYP Clear)(GLbitfield mask);
+	void (GL_APIENTRYP Flush)(void);
 	void (GL_APIENTRYP FramebufferTexture2D)(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
 	void (GL_APIENTRYP FramebufferRenderbuffer)(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer);
 	GLenum (GL_APIENTRYP CheckFramebufferStatus)(GLenum target);
@@ -525,6 +532,11 @@ static void TBXR_LoadDriverGL()
 	driverGL.GenRenderbuffers = (void*)eglGetProcAddress("glGenRenderbuffers");
 	driverGL.BindRenderbuffer = (void*)eglGetProcAddress("glBindRenderbuffer");
 	driverGL.RenderbufferStorage = (void*)eglGetProcAddress("glRenderbufferStorage");
+	driverGL.GenFramebuffers = (void*)eglGetProcAddress("glGenFramebuffers");
+	driverGL.BindFramebuffer = (void*)eglGetProcAddress("glBindFramebuffer");
+	driverGL.ClearColor = (void*)eglGetProcAddress("glClearColor");
+	driverGL.Clear = (void*)eglGetProcAddress("glClear");
+	driverGL.Flush = (void*)eglGetProcAddress("glFlush");
 	driverGL.FramebufferTexture2D = (void*)eglGetProcAddress("glFramebufferTexture2D");
 	driverGL.FramebufferRenderbuffer = (void*)eglGetProcAddress("glFramebufferRenderbuffer");
 	driverGL.CheckFramebufferStatus = (void*)eglGetProcAddress("glCheckFramebufferStatus");
@@ -2400,6 +2412,207 @@ bool TBXR_ShouldRender()
 }
 #endif
 
+#ifdef L1VR_STEAM_FRAME
+/*
+================================================================================
+
+The menu laser
+
+The flat screen is a quad layer, world-locked in front of the player. The weapon hand's aim
+pose (aim/pose, -z, the runtime's pointing ray, not the grip) gives a ray; where it meets the
+quad is the cursor, and the beam and its dot are layers of their own, submitted after the screen,
+so SteamVR draws them over it and nothing in the eye image can cover them.
+
+================================================================================
+*/
+
+#define SCREEN_QUAD_WIDTH 5.0f
+#define SCREEN_QUAD_HEIGHT 4.5f
+
+// where the screen quad is this frame: yaw only, in front of the head, 1 m up
+static void TBXR_ScreenQuadPose(float pose[7])
+{
+	const XrVector3f axis = {0.0f, 1.0f, 0.0f};
+	const XrQuaternionf turn = XrQuaternionf_CreateFromVectorAngle(axis, DEG2RAD(playerYaw));
+	pose[0] = gAppState.xfStageFromHead.position.x - sin(DEG2RAD(playerYaw)) * VR_GetScreenLayerDistance();
+	pose[1] = 1.0f;
+	pose[2] = gAppState.xfStageFromHead.position.z - cos(DEG2RAD(playerYaw)) * VR_GetScreenLayerDistance();
+	pose[3] = turn.x; pose[4] = turn.y; pose[5] = turn.z; pose[6] = turn.w;
+}
+
+typedef struct {
+	bool visible;			// the screen is up and the hand is tracked
+	bool hit;				// the ray meets the quad in front of the hand
+	bool onPanel;			// and inside its edges
+	float u, v;
+	float origin[3];		// the beam starts here
+	float end[3];			// and ends here
+	float quad[7];
+} tbxrPointer_t;
+
+static void TBXR_ComputePointer(tbxrPointer_t* pointer)
+{
+	memset(pointer, 0, sizeof(*pointer));
+	if (!VR_UseScreenLayer() || gAppState.Session == XR_NULL_HANDLE)
+		return;
+
+	const bool leftHanded = (vr_control_scheme != NULL && vr_control_scheme->integer >= 10);
+	const ovrTrackedController* hand = leftHanded ? &leftRemoteTracking_new : &rightRemoteTracking_new;
+	if (!hand->Active)
+		return;
+
+	pointer->visible = true;
+	const XrPosef* aim = &hand->Pose;
+	const float pose[7] = {aim->position.x, aim->position.y, aim->position.z,
+						   aim->orientation.x, aim->orientation.y, aim->orientation.z, aim->orientation.w};
+	float forward[3];
+	VrPointer_Forward(pose, forward);
+
+	// start a little in front of the controller, not inside it
+	for (int i = 0; i < 3; i++)
+		pointer->origin[i] = pose[i] + forward[i] * 0.03f;
+
+	TBXR_ScreenQuadPose(pointer->quad);
+	float t = 0.0f;
+	pointer->hit = VrPointer_RayQuad(pointer->origin, forward, pointer->quad, SCREEN_QUAD_WIDTH, SCREEN_QUAD_HEIGHT,
+									 &pointer->u, &pointer->v, &t);
+	pointer->onPanel = pointer->hit && pointer->u >= 0.0f && pointer->u <= 1.0f && pointer->v >= 0.0f && pointer->v <= 1.0f;
+	if (!pointer->hit || t > 12.0f)
+		t = 3.0f;
+	for (int i = 0; i < 3; i++)
+		pointer->end[i] = pointer->origin[i] + forward[i] * t;
+}
+
+bool TBXR_ScreenPointer(float* u, float* v)
+{
+	tbxrPointer_t pointer;
+	TBXR_ComputePointer(&pointer);
+	if (!pointer.hit)
+		return false;
+	*u = pointer.u < 0.0f ? 0.0f : (pointer.u > 1.0f ? 1.0f : pointer.u);
+	*v = pointer.v < 0.0f ? 0.0f : (pointer.v > 1.0f ? 1.0f : pointer.v);
+	return true;
+}
+
+// A little swapchain of one flat colour for the beam and the dot to be quads of
+#define POINTER_TEXTURE_SIZE 16
+
+static struct {
+	XrSwapchain handle;
+	uint32_t count;
+	XrSwapchainImageOpenGLESKHR* images;
+	GLuint* framebuffers;
+	bool failed;
+} pointerChain;
+
+static bool TBXR_PaintPointerTexture()
+{
+	if (pointerChain.failed)
+		return false;
+
+	if (pointerChain.handle == XR_NULL_HANDLE) {
+		XrSwapchainCreateInfo info;
+		memset(&info, 0, sizeof(info));
+		info.type = XR_TYPE_SWAPCHAIN_CREATE_INFO;
+		info.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
+		info.format = GL_SRGB8_ALPHA8;
+		info.sampleCount = 1;
+		info.width = POINTER_TEXTURE_SIZE;
+		info.height = POINTER_TEXTURE_SIZE;
+		info.faceCount = 1;
+		info.arraySize = 1;
+		info.mipCount = 1;
+		if (XR_FAILED(xrCreateSwapchain(gAppState.Session, &info, &pointerChain.handle))) {
+			ALOGE("[openxr] the menu laser's swapchain couldn't be made, no laser");
+			pointerChain.failed = true;
+			return false;
+		}
+		xrEnumerateSwapchainImages(pointerChain.handle, 0, &pointerChain.count, NULL);
+		pointerChain.images = (XrSwapchainImageOpenGLESKHR*)calloc(pointerChain.count, sizeof(XrSwapchainImageOpenGLESKHR));
+		for (uint32_t i = 0; i < pointerChain.count; i++)
+			pointerChain.images[i].type = XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR;
+		xrEnumerateSwapchainImages(pointerChain.handle, pointerChain.count, &pointerChain.count,
+								   (XrSwapchainImageBaseHeader*)pointerChain.images);
+		pointerChain.framebuffers = (GLuint*)calloc(pointerChain.count, sizeof(GLuint));
+		ALOGI("[openxr] menu laser: %u images of %dx%d", pointerChain.count, POINTER_TEXTURE_SIZE, POINTER_TEXTURE_SIZE);
+	}
+
+	uint32_t index = 0;
+	XrSwapchainImageAcquireInfo acquire = {XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO, NULL};
+	if (XR_FAILED(xrAcquireSwapchainImage(pointerChain.handle, &acquire, &index)))
+		return false;
+	XrSwapchainImageWaitInfo wait = {XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO, NULL, 1000000000};
+	XrResult result = xrWaitSwapchainImage(pointerChain.handle, &wait);
+	while (result == XR_TIMEOUT_EXPIRED)
+		result = xrWaitSwapchainImage(pointerChain.handle, &wait);
+
+	TBXR_LoadDriverGL();
+	if (pointerChain.framebuffers[index] == 0) {
+		driverGL.GenFramebuffers(1, &pointerChain.framebuffers[index]);
+		driverGL.BindFramebuffer(GL_FRAMEBUFFER, pointerChain.framebuffers[index]);
+		driverGL.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pointerChain.images[index].image, 0);
+	} else {
+		driverGL.BindFramebuffer(GL_FRAMEBUFFER, pointerChain.framebuffers[index]);
+	}
+	driverGL.ClearColor(0.15f, 0.75f, 1.0f, 1.0f);
+	driverGL.Clear(GL_COLOR_BUFFER_BIT);
+	driverGL.BindFramebuffer(GL_FRAMEBUFFER, 0);
+	driverGL.Flush();
+
+	XrSwapchainImageReleaseInfo release = {XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO, NULL};
+	return XR_SUCCEEDED(xrReleaseSwapchainImage(pointerChain.handle, &release));
+}
+
+// The beam and its dot as quad layers of their own, after the screen. Returns how many were added.
+static void TBXR_AddPointerLayers()
+{
+	tbxrPointer_t pointer;
+	TBXR_ComputePointer(&pointer);
+	if (!pointer.visible || !TBXR_PaintPointerTexture())
+		return;
+
+	const float head[3] = {gAppState.xfStageFromHead.position.x, gAppState.xfStageFromHead.position.y,
+						   gAppState.xfStageFromHead.position.z};
+
+	XrCompositionLayerQuad layer;
+	memset(&layer, 0, sizeof(layer));
+	layer.type = XR_TYPE_COMPOSITION_LAYER_QUAD;
+	layer.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+	layer.space = gAppState.CurrentSpace;
+	layer.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+	layer.subImage.swapchain = pointerChain.handle;
+	layer.subImage.imageRect.extent.width = POINTER_TEXTURE_SIZE;
+	layer.subImage.imageRect.extent.height = POINTER_TEXTURE_SIZE;
+
+	// the beam: thin, along the ray, turned about it to face the eye
+	float beamPose[7];
+	const float length = VrPointer_BeamPose(pointer.origin, pointer.end, head, beamPose);
+	if (length > 0.01f && gAppState.LayerCount < ovrMaxLayerCount) {
+		layer.pose.position = (XrVector3f){beamPose[0], beamPose[1], beamPose[2]};
+		layer.pose.orientation = (XrQuaternionf){beamPose[3], beamPose[4], beamPose[5], beamPose[6]};
+		layer.size = (XrExtent2Df){0.006f, length};
+		gAppState.Layers[gAppState.LayerCount++].Quad = layer;
+	}
+
+	// the dot where it meets the panel, a hair in front of it
+	if (pointer.onPanel && gAppState.LayerCount < ovrMaxLayerCount) {
+		float dotPose[7];
+		VrPointer_DotPose(pointer.end, pointer.quad, 0.01f, dotPose);
+		layer.pose.position = (XrVector3f){dotPose[0], dotPose[1], dotPose[2]};
+		layer.pose.orientation = (XrQuaternionf){dotPose[3], dotPose[4], dotPose[5], dotPose[6]};
+		layer.size = (XrExtent2Df){0.05f, 0.05f};
+		gAppState.Layers[gAppState.LayerCount++].Quad = layer;
+	}
+
+	static bool logged = false;
+	if (!logged) {
+		logged = true;
+		ALOGI("[openxr] menu laser on top of the screen: beam %.2f m, %s (u %.2f v %.2f)", length,
+			  pointer.onPanel ? "on the panel" : "off the panel", pointer.u, pointer.v);
+	}
+}
+#endif
+
 void TBXR_submitFrame()
 {
 	if (gAppState.SessionActive == GL_FALSE) {
@@ -2498,6 +2711,9 @@ void TBXR_submitFrame()
 		quad_layer.size = size;
 
 		gAppState.Layers[gAppState.LayerCount++].Quad = quad_layer;
+#ifdef L1VR_STEAM_FRAME
+		TBXR_AddPointerLayers();
+#endif
 	}
 
 	// Compose the layers for this frame.
