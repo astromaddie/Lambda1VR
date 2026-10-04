@@ -43,14 +43,22 @@ that for logs. Start it from the Steam library to actually play.
 
 ## Game data
 
-Copy the `valve` folder from your Steam copy of Half-Life to
-`~/Documents/Lambda1VR/valve` on the headset. Inside Lepton that's
-`/sdcard/Documents/Lambda1VR/valve`. Documents is the headset's own folder, so
-it's still there after a Lepton reset. On the Quest it's `/sdcard/xash`, that
-hasn't changed.
+Install Half-Life from Steam on the Frame, and that's it. The Android container shows the headset's
+Steam folders (read only), so the game uses the files where Steam put them, there's nothing to copy. At
+start the app looks for `steamapps/common/Half-Life/valve/liblist.gam` in the Steam library (and in the
+other libraries `libraryfolders.vdf` lists, like one on an SD card) and tells the engine to treat that folder
+as read only (`-rodir`). The expansions (Opposing Force, Blue Shift) are in the same folder on Steam.
 
-The app makes the folder on first start and puts its own files in it (config,
-the weapon models and so on), like it does on the Quest.
+`~/Documents/Lambda1VR` is the writable side, and it wins when the same file is in both. Inside Lepton it's
+`/sdcard/Documents/Lambda1VR`, the headset's own folder, so it survives a Lepton reset. It holds your saves and
+settings, and the files this app puts there on first start (the replacement weapon models, the sprites, the
+loading screens), like it does on the Quest. The engine also makes empty folders there with the names of the
+game folders in Steam's. On the Quest it's `/sdcard/xash`, that hasn't changed.
+
+If there's no Half-Life in Steam on the headset, it falls back to the old way: copy the `valve` folder from a
+PC's Steam copy to `~/Documents/Lambda1VR/valve`. A copy there is used too when Steam has one as well (it's
+found first, so a stale copy would be used over the Steam files). The log says which one it picked, with a
+`[data]` line.
 
 ## Controls
 

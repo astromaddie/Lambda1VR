@@ -151,6 +151,53 @@ import static android.system.Os.setenv;
 		System.exit(0);
 	}
 
+	/**
+	 * The Frame's Android container shows the headset's Steam folders at the same paths, read only. If
+	 * Half-Life is installed there, the game's files can be used from where they are instead of a copy.
+	 * Looks in the Steam library folders (the main one, and the others libraryfolders.vdf lists, such as
+	 * one on an SD card) for steamapps/common/Half-Life/valve/liblist.gam. Returns the Half-Life folder or null.
+	 */
+	private String findSteamHalfLife()
+	{
+		final String steam = "/home/steamos/.local/share/Steam";
+		java.util.ArrayList<String> libraries = new java.util.ArrayList<String>();
+		libraries.add(steam);
+
+		try
+		{
+			BufferedReader br = new BufferedReader(new FileReader(steam + "/steamapps/libraryfolders.vdf"));
+			String line;
+			while ((line = br.readLine()) != null)
+			{
+				// "path"		"/some/library"
+				line = line.trim();
+				if (line.startsWith("\"path\""))
+				{
+					String[] parts = line.split("\"");
+					if (parts.length >= 4 && !libraries.contains(parts[3]))
+					{
+						libraries.add(parts[3]);
+					}
+				}
+			}
+			br.close();
+		} catch (IOException e)
+		{
+			Log.i(TAG, "[data] no libraryfolders.vdf: " + e.getMessage());
+		}
+
+		for (String library : libraries)
+		{
+			File liblist = new File(library + "/steamapps/common/Half-Life/valve/liblist.gam");
+			if (liblist.canRead())
+			{
+				return library + "/steamapps/common/Half-Life";
+			}
+			Log.i(TAG, "[data] no Half-Life in the Steam library " + library);
+		}
+		return null;
+	}
+
 	public void create()
 	{
 		copy_asset(getFilesDir().getPath(), "extras.pak", false);
@@ -509,6 +556,22 @@ import static android.system.Os.setenv;
 		try {
 			ApplicationInfo info = getApplicationInfo();
 			setenv("XASH3D_BASEDIR", DATA_DIR, true);
+
+			if (BuildConfig.STEAM_FRAME)
+			{
+				// Half-Life from Steam, read only, in place. The folder above is searched after it, so what's
+				// in there (the saves, the settings, this app's own models and sprites) wins over Steam's files.
+				String steamHalfLife = findSteamHalfLife();
+				if (steamHalfLife != null)
+				{
+					setenv("XASH3D_RODIR", steamHalfLife, true);
+					Log.i(TAG, "[data] game files: Steam, in place, read only (" + steamHalfLife + "); saves and settings in " + DATA_DIR);
+				}
+				else
+				{
+					Log.i(TAG, "[data] game files: no Steam install of Half-Life found, using the copy in " + DATA_DIR);
+				}
+			}
 			setenv("XASH3D_GAMELIBDIR", info.nativeLibraryDir, true);
 			setenv("XASH3D_GAMEDIR", "valve", true);
 			setenv( "XASH3D_EXTRAS_PAK1", getFilesDir().getPath() + "/extras.pak", true );
