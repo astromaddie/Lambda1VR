@@ -54,30 +54,71 @@ the weapon models and so on), like it does on the Quest.
 
 ## Controls
 
-The Frame controllers are a bit like a split gamepad. Left has the D-pad,
-View, bumper, trigger, grip and stick. Right has A B X Y, Menu, bumper,
-trigger, grip and stick. I kept the Quest layout wherever the Frame has the
-button.
+The Frame's controllers are a split gamepad. Left has the stick, trigger, grip, bumper, D-pad and
+View. Right has the stick, trigger, grip, bumper, A B X Y and Menu.
 
-| Frame | Does |
+Half-Life's 25th anniversary update ships its own Steam Input layout for a gamepad
+(`controller_configs/xbox_controller_config_standard.vdf` in the game's `valve` folder). I used that
+one, so it works like the gamepad version people already know, and added the VR parts: your head looks,
+and the grips are your hands.
+
+| Frame | Playing |
 | --- | --- |
-| Right trigger, grip, stick | Same as Quest: fire, reload and secondary fire, turn and weapon select |
-| Left stick, trigger, grip | Move, run, two-handed hold |
-| Stick clicks | Use (right), laser sight and scope (left) |
-| A, B | Crouch, jump |
-| Left bumper or right X | Torch |
-| View (tap) or right Y | Screen view, scoreboard in multiplayer |
-| Right Menu | Pause and menu back |
-| View (hold 1 s) | Recentre, with a buzz |
-| View (hold 3 s) | Recentre and use the head height as standing height |
+| Left stick | Move |
+| Left stick click | Crouch (toggle). Physically ducking still works |
+| Right stick left / right | Turn (Lambda1VR's snap or smooth turn) |
+| Right stick click | Flashlight |
+| Right stick up | Flat screen view (the scoreboard in multiplayer) |
+| Right stick down | Laser sight, and steadies a scope |
+| Weapon hand trigger | Fire |
+| Other hand trigger | Alt fire |
+| A | Jump |
+| B | Crouch (while held) |
+| X | Use |
+| Y | Reload |
+| Left / right bumper | Previous / next weapon (fire to pick it, like in Half-Life) |
+| D-pad up / down | Previous / next weapon, same as the bumpers |
+| D-pad right | Last weapon |
+| D-pad left | Crowbar |
+| Menu | Pause menu. Held for half a second: quick save |
+| View | Flashlight (the scoreboard in multiplayer) |
+| View, held 1 s | Recentre, with a buzz |
+| View, held 3 s | Recentre and use the head height as standing height |
+| Weapon hand grip | Use from that hand: grab, push or pull things, press buttons. Behind your head it pulls the crowbar from the backpack |
+| Other hand grip | Near the weapon: the two-handed hold (steadier aim, a scope). Well away from it: use from that hand |
 
-The Quest has X and Y on the left controller, which is why the torch and screen
-view moved. Left-handed schemes use the same physical buttons.
+The weapon hand is the right one, or the left one with `vr_control_scheme 10`. Left-handed swaps the
+roles that belong to a hand (the triggers, the grips, the laser, where the gun is) and leaves the buttons
+where they are.
 
-If SteamVR hands the app Index or Touch controllers instead, they bind like they
-do on Quest (Index has no Menu for apps, so pause is the left trackpad pressed
-hard). The Frame layout only kicks in when the runtime says the Frame profile is
-active.
+The grips use what Lambda1VR already had: the game looks for things you can use near the hand and in
+front of it, from where the controller is, not from your head. The other grip decides what it is when you
+press it, by how far the hands are from each other (under 35 cm it's the gun hold, over 55 cm it's use, in
+between it stays what it was last time), and keeps that until you let go. The log says which it picked.
+`vr_gesture_triggered_use` has to stay on for this, it's what gives the short reach and use from the other
+hand. Waving a hand about doesn't use things on the Frame, double clicking jump doesn't crouch.
+
+Kept as it was: aiming from the controller, swinging the crowbar, the flashlight beam from your off hand
+(`vr_headtorch` and `vr_reversetorch` still work), the two-handed scope, reaching behind your head for the
+crowbar, ducking by ducking, walking around the room, haptics, the highlight on things you can use. With
+your other hand behind your head, the flashlight and View buttons are quick save, and the right stick up
+is quick load, as on the Quest. Walk (the slow key) is gone, the stick is analog.
+
+| Frame | In a menu |
+| --- | --- |
+| Weapon hand laser and trigger | Point and click |
+| A | Confirm |
+| B, Menu, View | Back |
+| D-pad, left stick | Move |
+| Left / right bumper | Previous / next tab or page |
+| Right stick up / down | Scroll |
+
+The map is one table, `VrFrameMap.c`, and `tools/steam_frame/tests` in the dev branch checks it for an
+input that does two things in one situation and for actions nothing can reach.
+
+If SteamVR hands the app Index or Touch controllers instead, they bind like they do on Quest (Index has no
+Menu for apps, so pause is the left trackpad pressed hard). The Frame layout only kicks in when the runtime
+says the Frame profile is active.
 
 ## What's different from the Quest build, and why
 
@@ -99,6 +140,10 @@ active.
 - The eye framebuffers use plain GLES 3 on the Frame, so the runtime's GL doesn't
   need `EXT_multisampled_render_to_texture`. It's one swapchain per eye, there's
   no multiview.
+- The HUD, game text and titles (the tram credits) stay level with the world when you tilt your head. They
+  were drawn into the eye image, so they rolled with your head. The HUD pass is turned the other way by the
+  roll the world is drawn with, about the middle of each eye's view, so it follows your head's turn and
+  nod but not its roll. The menus (a panel fixed in the world) and a scope are as they were.
 - Each eye is drawn from the eye pose the runtime gives (position, and rotation if the eye
   has one, in head space), and each projection view goes in with that eye's own pose. The
   Quest build moves each eye by a fixed 65 mm along the side and submits both views with
