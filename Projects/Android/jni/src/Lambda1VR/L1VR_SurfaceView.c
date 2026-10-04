@@ -742,6 +742,8 @@ static jobject jniCallbackObj=0;
 int JNI_OnLoad(JavaVM* vm, void* reserved)
 {
 	JNIEnv *env;
+	//jni_shutdown needs this, nothing else sets it
+	jVM = vm;
 	if((*vm)->GetEnv(vm, (void**) &env, JNI_VERSION_1_4) != JNI_OK)
 	{
 		ALOGE("Failed JNI_OnLoad");
