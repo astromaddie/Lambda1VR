@@ -10,6 +10,8 @@ as well as to give game developers well known workflow and extend it.
 Read more about Xash3D on ModDB: https://www.moddb.com/engines/xash3d-engine
 ```
 
+There's a build for Valve's Steam Frame too, see [docs/STEAM_FRAME_VR.md](docs/STEAM_FRAME_VR.md).
+
 ### SideQuest
 The easiest way to install this on your Quest is using SideQuest, a PC desktop app designed to simplify sideloading apps and games ( even beat saber songs on quest ) on Standalone Android Headsets like Oculus Quest and Oculus Go. It supports drag and drop for installing APK files!
 
