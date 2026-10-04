@@ -327,6 +327,9 @@ void VR_Get2DOffset(int eye, int width, int height, float *dx, float *dy)
 }
 
 #ifdef L1VR_STEAM_FRAME
+// which way the 2D space turns for a positive view roll (it's y-down, so it's the other way to what you'd think)
+#define HUD_ROLL_SIGN 1.0f
+
 /*
 Where an eye is for the world render, from the runtime's own eye pose in head space (the same
 poses and predicted time the layer is submitted with). offset is in world units, in the
@@ -381,6 +384,26 @@ float VR_GetHudShift(int eye)
 			  vr_hud_distance->value, shift);
 	}
 	return shift;
+}
+
+/*
+How far to turn the 2D content (the HUD and the text of scripted sequences) so that it stays level
+with the world when the head rolls: the roll the world is drawn with, the other way. 0 on the screen
+layer (a world-locked panel, it never rolls with the head) and in a scope.
+*/
+float VR_GetHudRoll(int eye)
+{
+	if (eye < 0 || eye >= ovrMaxNumEyes || !gAppState.SessionActive || VR_UseScreenLayer() || isScopeEngaged())
+		return 0.0f;
+
+	const float roll = cl.refdef.viewangles[ROLL];
+	static bool logged = false;
+	if (!logged && fabsf(roll) > 5.0f)
+	{
+		logged = true;
+		ALOGI("[vr] hud kept level: the view rolls %.1f degrees, the HUD is turned the other way", roll);
+	}
+	return HUD_ROLL_SIGN * roll;
 }
 #endif
 

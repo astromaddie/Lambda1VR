@@ -1152,6 +1152,8 @@ static void CL_DrawPause( void )
 extern convar_t *vr_stereo_side;
 float VR_GetHudShift( int eye );
 void R_SetHudShift( float pixels );
+void R_SetHudRoll( float degrees );
+float VR_GetHudRoll( int eye );
 bool isScopeEngaged( void );
 
 /*
@@ -1165,7 +1167,7 @@ offset onto the optical axis still works for those), and the whole HUD is shifte
 instead, to where vr_hud_distance says. A scope is mono already, so that is left alone.
 ===============
 */
-static void CL_RedrawHUD( void )
+static void CL_RedrawHUD( qboolean paused )
 {
 	const int eye = vr_stereo_side->integer;
 	float shift;
@@ -1174,6 +1176,7 @@ static void CL_RedrawHUD( void )
 	{
 		CL_DrawCenterPrint ();
 		clgame.dllFuncs.pfnRedraw( cl.time, cl.refdef.intermission );
+		if( paused ) CL_DrawPause();
 		return;
 	}
 
@@ -1182,14 +1185,17 @@ static void CL_RedrawHUD( void )
 	vr_stereo_side->value = eye + 2;
 	vr_stereo_side->integer = eye + 2;
 	R_SetHudShift( shift );
+	R_SetHudRoll( VR_GetHudRoll( eye ));
 	R_Set2DMode( true );
 
 	CL_DrawCenterPrint ();
 	clgame.dllFuncs.pfnRedraw( cl.time, cl.refdef.intermission );
+	if( paused ) CL_DrawPause();
 
 	vr_stereo_side->value = eye;
 	vr_stereo_side->integer = eye;
 	R_SetHudShift( 0.0f );
+	R_SetHudRoll( 0.0f );
 	R_Set2DMode( true );
 }
 #endif
@@ -1208,7 +1214,7 @@ void CL_DrawHUD( int state )
 		CL_DrawScreenFade ();
 		CL_DrawCrosshair ();
 #ifdef L1VR_STEAM_FRAME
-		CL_RedrawHUD ();
+		CL_RedrawHUD ( false );
 #else
 		CL_DrawCenterPrint ();
 		clgame.dllFuncs.pfnRedraw( cl.time, cl.refdef.intermission );
@@ -1218,12 +1224,12 @@ void CL_DrawHUD( int state )
 		CL_DrawScreenFade ();
 		CL_DrawCrosshair ();
 #ifdef L1VR_STEAM_FRAME
-		CL_RedrawHUD ();
+		CL_RedrawHUD ( true );
 #else
 		CL_DrawCenterPrint ();
 		clgame.dllFuncs.pfnRedraw( cl.time, cl.refdef.intermission );
-#endif
 		CL_DrawPause();
+#endif
 		break;
 	case CL_LOADING:
 		CL_DrawLoading( scr_loading->value );

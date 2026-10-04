@@ -286,10 +286,17 @@ the eyes. Shifting the ortho window here moves every 2D item at once.
 #ifdef L1VR_STEAM_FRAME
 // extra shift for the HUD pass (see CL_RedrawHUD), in pixels, positive to the right
 static float r_hudShift = 0.0f;
+// and how far to turn it, in degrees, about the optical axis (it stays level when the head rolls)
+static float r_hudRoll = 0.0f;
 
 void R_SetHudShift( float pixels )
 {
 	r_hudShift = pixels;
+}
+
+void R_SetHudRoll( float degrees )
+{
+	r_hudRoll = degrees;
 }
 #endif
 
@@ -315,6 +322,9 @@ R_Set2DMode
 void R_Set2DMode( qboolean enable )
 {
 	static float	last_dx = 0.0f, last_dy = 0.0f;
+#ifdef L1VR_STEAM_FRAME
+	static float	last_roll = 0.0f;
+#endif
 	float		dx, dy;
 
 	if( enable )
@@ -322,8 +332,14 @@ void R_Set2DMode( qboolean enable )
 		R_Get2DOffset( &dx, &dy );
 
 		// the offset flips sign between eyes, so a cached ortho from the other eye is stale
+#ifdef L1VR_STEAM_FRAME
+		if( glState.in2DMode && dx == last_dx && dy == last_dy && r_hudRoll == last_roll )
+			return;
+		last_roll = r_hudRoll;
+#else
 		if( glState.in2DMode && dx == last_dx && dy == last_dy )
 			return;
+#endif
 
 		last_dx = dx;
 		last_dy = dy;
@@ -333,6 +349,16 @@ void R_Set2DMode( qboolean enable )
 		pglMatrixMode( GL_PROJECTION );
 		pglLoadIdentity();
 		pglOrtho( -dx, glState.width - dx, glState.height - dy, -dy, -99999, 99999 );
+#ifdef L1VR_STEAM_FRAME
+		if( r_hudRoll != 0.0f )
+		{
+			// about the middle of the 2D space, which the offset above has put on the optical axis,
+			// before the HUD distance shift (that one is along the eyes, and so is along the image)
+			pglTranslatef( glState.width * 0.5f, glState.height * 0.5f, 0.0f );
+			pglRotatef( r_hudRoll, 0.0f, 0.0f, 1.0f );
+			pglTranslatef( -glState.width * 0.5f, -glState.height * 0.5f, 0.0f );
+		}
+#endif
 		pglMatrixMode( GL_MODELVIEW );
 		pglLoadIdentity();
 
