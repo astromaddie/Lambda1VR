@@ -537,6 +537,15 @@ void * AppThreadFunction( void * parm )
 
 	TBXR_EnterVR();
 	TBXR_InitRenderer();
+#ifdef L1VR_STEAM_FRAME
+	//The positional movement scaling goes by vr_refresh, so make it the real rate
+	if (TBXR_GetRefresh() > 0)
+	{
+		char rate[16];
+		Q_snprintf(rate, sizeof(rate), "%d", TBXR_GetRefresh());
+		Cvar_Set2("vr_refresh", rate, true);
+	}
+#endif
 	TBXR_InitActions();
 	TBXR_WaitForSessionActive();
 
@@ -554,6 +563,15 @@ void * AppThreadFunction( void * parm )
 		else
 		{
 			TBXR_FrameSetup();
+
+#ifdef L1VR_STEAM_FRAME
+			if (!TBXR_ShouldRender())
+			{
+				//Standby: keep the frame loop going, but the game waits too
+				TBXR_submitFrame();
+				continue;
+			}
+#endif
 
 			//Call the game drawing code to populate the cylinder layer texture
 			//if we are now shutting down, drop out here

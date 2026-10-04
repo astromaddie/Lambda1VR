@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <unistd.h>
 #include <pthread.h>
@@ -50,7 +51,12 @@ PFNEGLGETSYNCATTRIBKHRPROC		eglGetSyncAttribKHR;
 //Let's go to the maximum!
 int NUM_MULTI_SAMPLES	= 1;
 int REFRESH	            = 0;
+#ifdef L1VR_STEAM_FRAME
+//The Frame's recommended size is already big, 1.0 is its own idea of a good size
+float SS_MULTIPLIER    = 1.0f;
+#else
 float SS_MULTIPLIER    = 1.3f;
+#endif
 
 GLboolean stageSupported = GL_FALSE;
 
@@ -120,6 +126,92 @@ const char* const requiredExtensionNames_pico[] = {
 		XR_PICO_CONFIGS_EXT_EXTENSION_NAME};
 
 
+#ifdef L1VR_STEAM_FRAME
+// SteamVR on the Frame doesn't have to offer what Quest or Pico do, so only
+// OpenGL ES is a must. The rest gets enabled when the runtime lists it.
+#define XR_VALVE_FRAME_CONTROLLER_INTERACTION_EXTENSION_NAME "XR_VALVE_frame_controller_interaction"
+
+static const char* const wantedExtensionNames_frame[] = {
+		XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME,
+		XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME,
+		XR_EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME,
+		XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME,
+		XR_VALVE_FRAME_CONTROLLER_INTERACTION_EXTENSION_NAME};
+
+#define NUM_WANTED_EXTENSIONS_FRAME (sizeof(wantedExtensionNames_frame) / sizeof(wantedExtensionNames_frame[0]))
+
+static const char* enabledExtensionNames_frame[NUM_WANTED_EXTENSIONS_FRAME];
+static uint32_t numEnabledExtensions_frame = 0;
+
+bool TBXR_ExtensionEnabled(const char* name)
+{
+	for (uint32_t i = 0; i < numEnabledExtensions_frame; i++)
+	{
+		if (strcmp(enabledExtensionNames_frame[i], name) == 0)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+static void TBXR_EnableAvailableExtensions()
+{
+	uint32_t count = 0;
+	xrEnumerateInstanceExtensionProperties(NULL, 0, &count, NULL);
+
+	XrExtensionProperties* available = (XrExtensionProperties*)calloc(count + 1, sizeof(XrExtensionProperties));
+	for (uint32_t i = 0; i < count; i++)
+	{
+		available[i].type = XR_TYPE_EXTENSION_PROPERTIES;
+	}
+	xrEnumerateInstanceExtensionProperties(NULL, count, &count, available);
+	ALOGI("[openxr] the runtime offers %u instance extensions", count);
+
+	numEnabledExtensions_frame = 0;
+	for (uint32_t w = 0; w < NUM_WANTED_EXTENSIONS_FRAME; w++)
+	{
+		bool found = false;
+		for (uint32_t i = 0; i < count && !found; i++)
+		{
+			found = (strcmp(available[i].extensionName, wantedExtensionNames_frame[w]) == 0);
+		}
+
+		if (found)
+		{
+			enabledExtensionNames_frame[numEnabledExtensions_frame++] = wantedExtensionNames_frame[w];
+			ALOGI("[openxr] extension enabled: %s", wantedExtensionNames_frame[w]);
+		}
+		else
+		{
+			ALOGI("[openxr] extension not offered: %s", wantedExtensionNames_frame[w]);
+		}
+	}
+
+	free(available);
+}
+
+static const char* TBXR_SessionStateName(XrSessionState state)
+{
+	switch (state)
+	{
+		case XR_SESSION_STATE_IDLE:				return "IDLE";
+		case XR_SESSION_STATE_READY:			return "READY";
+		case XR_SESSION_STATE_SYNCHRONIZED:		return "SYNCHRONIZED";
+		case XR_SESSION_STATE_VISIBLE:			return "VISIBLE";
+		case XR_SESSION_STATE_FOCUSED:			return "FOCUSED";
+		case XR_SESSION_STATE_STOPPING:			return "STOPPING";
+		case XR_SESSION_STATE_LOSS_PENDING:		return "LOSS_PENDING";
+		case XR_SESSION_STATE_EXITING:			return "EXITING";
+		default:								return "UNKNOWN";
+	}
+}
+
+#define PERF_SETTINGS_AVAILABLE() TBXR_ExtensionEnabled(XR_EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME)
+#else
+#define PERF_SETTINGS_AVAILABLE() true
+#endif
+
 const uint32_t numRequiredExtensions_meta =
         sizeof(requiredExtensionNames_meta) / sizeof(requiredExtensionNames_meta[0]);
 const uint32_t numRequiredExtensions_pico =
@@ -146,6 +238,10 @@ void TBXR_exit(int exitCode)
 {
 	runStatus = exitCode;
 }
+
+#ifdef L1VR_STEAM_FRAME
+void Host_Shutdown( void );
+#endif
 
 /*
 ================================================================================
@@ -486,6 +582,34 @@ static bool ovrFramebuffer_Create(
         GL(glTexParameteri(colorTextureTarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
         GL(glBindTexture(colorTextureTarget, 0));
 
+#ifdef L1VR_STEAM_FRAME
+        if (multisamples <= 1) {
+            // No multisampling, so plain GLES 3 does it and the runtime's GL doesn't
+            // have to offer EXT_multisampled_render_to_texture.
+            GL(glGenRenderbuffers(1, &frameBuffer->DepthBuffers[i]));
+            GL(glBindRenderbuffer(GL_RENDERBUFFER, frameBuffer->DepthBuffers[i]));
+            GL(glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height));
+            GL(glBindRenderbuffer(GL_RENDERBUFFER, 0));
+
+            GL(glGenFramebuffers(1, &frameBuffer->FrameBuffers[i]));
+            GL(glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer->FrameBuffers[i]));
+            GL(glFramebufferTexture2D(
+                    GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0));
+            GL(glFramebufferRenderbuffer(
+                    GL_FRAMEBUFFER,
+                    GL_DEPTH_ATTACHMENT,
+                    GL_RENDERBUFFER,
+                    frameBuffer->DepthBuffers[i]));
+            GL(GLenum renderFramebufferStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER));
+            GL(glBindFramebuffer(GL_FRAMEBUFFER, 0));
+            if (renderFramebufferStatus != GL_FRAMEBUFFER_COMPLETE) {
+                ALOGE(
+                        "Incomplete frame buffer object: %s",
+                        GlFrameBufferStatusString(renderFramebufferStatus));
+                return false;
+            }
+        } else
+#endif
         if (glRenderbufferStorageMultisampleEXT != NULL &&
             glFramebufferTexture2DMultisampleEXT != NULL) {
             // Create multisampled depth buffer.
@@ -523,6 +647,11 @@ static bool ovrFramebuffer_Create(
 			return false;
 		}
     }
+
+#ifdef L1VR_STEAM_FRAME
+    ALOGI("[openxr] swapchain: format 0x%x, %dx%d, %u images, multiview off (one swapchain per eye), %d samples",
+          (unsigned int)colorFormat, width, height, frameBuffer->TextureSwapChainLength, multisamples);
+#endif
 
     return true;
 }
@@ -599,11 +728,37 @@ void ovrRenderer_Clear(ovrRenderer* renderer) {
 	}
 }
 
+#ifdef L1VR_STEAM_FRAME
+// The engine renders linear colour into sRGB swapchains, so GL_SRGB8_ALPHA8 it is.
+// This just logs what the runtime has and shouts if that one isn't there.
+static void TBXR_CheckSwapchainFormats(XrSession session) {
+	uint32_t count = 0;
+	int64_t formats[64];
+	OXR(xrEnumerateSwapchainFormats(session, 0, &count, NULL));
+	if (count > 64) {
+		count = 64;
+	}
+	OXR(xrEnumerateSwapchainFormats(session, count, &count, formats));
+
+	bool found = false;
+	for (uint32_t i = 0; i < count; i++) {
+		ALOGI("[openxr] swapchain format offered: 0x%x", (unsigned int)formats[i]);
+		found |= (formats[i] == GL_SRGB8_ALPHA8);
+	}
+	if (!found) {
+		ALOGE("[openxr] GL_SRGB8_ALPHA8 is not offered, trying it anyway");
+	}
+}
+#endif
+
 void ovrRenderer_Create(
 		XrSession session,
 		ovrRenderer* renderer,
 		int suggestedEyeTextureWidth,
 		int suggestedEyeTextureHeight) {
+#ifdef L1VR_STEAM_FRAME
+	TBXR_CheckSwapchainFormats(session);
+#endif
 	// Create the frame buffers.
 	for (int eye = 0; eye < ovrMaxNumEyes; eye++) {
 		ovrFramebuffer_Create(
@@ -901,7 +1056,10 @@ void ovrApp_HandleSessionStateChanges(ovrApp* app, XrSessionState state) {
 		app->SessionActive = (result == XR_SUCCESS);
 
 		// Set session state once we have entered VR mode and have a valid session object.
-		if (app->SessionActive)
+#ifdef L1VR_STEAM_FRAME
+		ALOGI("[openxr] session begun: %s", app->SessionActive ? "ok" : "xrBeginSession failed");
+#endif
+		if (app->SessionActive && PERF_SETTINGS_AVAILABLE())
 		{
 			XrPerfSettingsLevelEXT cpuPerfLevel = XR_PERF_SETTINGS_LEVEL_BOOST_EXT;
 			XrPerfSettingsLevelEXT gpuPerfLevel = XR_PERF_SETTINGS_LEVEL_BOOST_EXT;
@@ -964,6 +1122,10 @@ GLboolean ovrApp_HandleXrEvents(ovrApp* app) {
 				ALOGV(
 						"xrPollEvent: received XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING event: time %f",
 						FromXrTime(instance_loss_pending_event->lossTime));
+#ifdef L1VR_STEAM_FRAME
+				ALOGI("[openxr] instance loss pending, shutting down");
+				TBXR_exit(0);
+#endif
 			} break;
 			case XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED:
 				ALOGV("xrPollEvent: received XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED event");
@@ -985,6 +1147,11 @@ GLboolean ovrApp_HandleXrEvents(ovrApp* app) {
 						"xrPollEvent: received XR_TYPE_EVENT_DATA_DISPLAY_REFRESH_RATE_CHANGED_FB event: fromRate %f -> toRate %f",
 						refresh_rate_changed_event->fromDisplayRefreshRate,
 						refresh_rate_changed_event->toDisplayRefreshRate);
+#ifdef L1VR_STEAM_FRAME
+				ALOGI("[openxr] display refresh rate %.1f -> %.1f Hz",
+					  refresh_rate_changed_event->fromDisplayRefreshRate,
+					  refresh_rate_changed_event->toDisplayRefreshRate);
+#endif
 			} break;
 			case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING: {
 				XrEventDataReferenceSpaceChangePending* ref_space_change_event =
@@ -1004,6 +1171,9 @@ GLboolean ovrApp_HandleXrEvents(ovrApp* app) {
 						session_state_changed_event->state,
 						(void*)session_state_changed_event->session,
 						FromXrTime(session_state_changed_event->time));
+#ifdef L1VR_STEAM_FRAME
+				ALOGI("[openxr] session state: %s", TBXR_SessionStateName(session_state_changed_event->state));
+#endif
 
 				switch (session_state_changed_event->state) {
 					case XR_SESSION_STATE_FOCUSED:
@@ -1016,6 +1186,13 @@ GLboolean ovrApp_HandleXrEvents(ovrApp* app) {
 					case XR_SESSION_STATE_STOPPING:
 						ovrApp_HandleSessionStateChanges(app, session_state_changed_event->state);
 						break;
+#ifdef L1VR_STEAM_FRAME
+					case XR_SESSION_STATE_LOSS_PENDING:
+					case XR_SESSION_STATE_EXITING:
+						//The runtime is done with us (SteamVR quit the app), leave through the normal shutdown
+						TBXR_exit(0);
+						break;
+#endif
 					default:
 						break;
 				}
@@ -1339,6 +1516,12 @@ void TBXR_InitialiseResolution()
 	//Shortcut to width and height
 	gAppState.Width = gAppState.ViewConfigurationView[0].recommendedImageRectWidth * SS_MULTIPLIER;
 	gAppState.Height = gAppState.ViewConfigurationView[0].recommendedImageRectHeight * SS_MULTIPLIER;
+#ifdef L1VR_STEAM_FRAME
+	ALOGI("[openxr] recommended eye size %ux%u, rendering %dx%d (x%.2f)",
+		  gAppState.ViewConfigurationView[0].recommendedImageRectWidth,
+		  gAppState.ViewConfigurationView[0].recommendedImageRectHeight,
+		  (int)gAppState.Width, (int)gAppState.Height, SS_MULTIPLIER);
+#endif
 }
 
 void TBXR_EnterVR( ) {
@@ -1353,7 +1536,11 @@ void TBXR_EnterVR( ) {
 	graphicsBindingAndroidGLES.type = XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR;
 	graphicsBindingAndroidGLES.next = NULL;
 	graphicsBindingAndroidGLES.display = eglGetCurrentDisplay();
+#ifdef L1VR_STEAM_FRAME
+	graphicsBindingAndroidGLES.config = gAppState.Egl.Config;
+#else
 	graphicsBindingAndroidGLES.config = eglGetCurrentSurface(EGL_DRAW);
+#endif
 	graphicsBindingAndroidGLES.context = eglGetCurrentContext();
 
 	XrSessionCreateInfo sessionCreateInfo = {};
@@ -1489,6 +1676,34 @@ void TBXR_InitRenderer(  ) {
         }
     }
 
+#ifdef L1VR_STEAM_FRAME
+	//Just look at the refresh rate, SteamVR only offers the one set for the app
+	if (TBXR_ExtensionEnabled(XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME))
+	{
+		PFN_xrEnumerateDisplayRefreshRatesFB pfnEnumerateRates = NULL;
+		PFN_xrGetDisplayRefreshRateFB pfnGetRate = NULL;
+		xrGetInstanceProcAddr(gAppState.Instance, "xrEnumerateDisplayRefreshRatesFB", (PFN_xrVoidFunction*)(&pfnEnumerateRates));
+		xrGetInstanceProcAddr(gAppState.Instance, "xrGetDisplayRefreshRateFB", (PFN_xrVoidFunction*)(&pfnGetRate));
+		if (pfnEnumerateRates != NULL && pfnGetRate != NULL)
+		{
+			float rates[16];
+			uint32_t numRates = 0;
+			pfnEnumerateRates(gAppState.Session, 0, &numRates, NULL);
+			if (numRates > 16)
+			{
+				numRates = 16;
+			}
+			pfnEnumerateRates(gAppState.Session, numRates, &numRates, rates);
+			for (uint32_t i = 0; i < numRates; i++)
+			{
+				ALOGI("[openxr] display refresh rate offered: %.1f Hz", rates[i]);
+			}
+			pfnGetRate(gAppState.Session, &gAppState.currentDisplayRefreshRate);
+			ALOGI("[openxr] display refresh rate now: %.1f Hz", gAppState.currentDisplayRefreshRate);
+		}
+	}
+#endif
+
 	uint32_t numOutputSpaces = 0;
 	OXR(xrEnumerateReferenceSpaces(gAppState.Session, 0, &numOutputSpaces, NULL));
 
@@ -1550,7 +1765,11 @@ void TBXR_InitialiseOpenXR()
 	EglInitExtensions();
 
     //First, find out which HMD we are using
+#ifdef L1VR_STEAM_FRAME
+    gAppState.OpenXRHMD = (char*)"steamframe";
+#else
     gAppState.OpenXRHMD = (char*)getenv("OPENXR_HMD");
+#endif
 
 	PFN_xrInitializeLoaderKHR xrInitializeLoaderKHR;
 	xrGetInstanceProcAddr(
@@ -1589,6 +1808,21 @@ void TBXR_InitialiseOpenXR()
 	instanceCreateInfo.enabledApiLayerCount = 0;
 	instanceCreateInfo.enabledApiLayerNames = NULL;
 
+#ifdef L1VR_STEAM_FRAME
+    TBXR_EnableAvailableExtensions();
+    if (!TBXR_ExtensionEnabled(XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME))
+    {
+        ALOGE("[openxr] the runtime has no OpenGL ES support, can't go on");
+        exit(1);
+    }
+    if (!TBXR_ExtensionEnabled(XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME))
+    {
+        //That struct only belongs in the chain when the extension is on
+        instanceCreateInfo.next = NULL;
+    }
+    instanceCreateInfo.enabledExtensionCount = numEnabledExtensions_frame;
+    instanceCreateInfo.enabledExtensionNames = enabledExtensionNames_frame;
+#else
     if (strstr(gAppState.OpenXRHMD, "meta") != NULL)
     {
         instanceCreateInfo.enabledExtensionCount = numRequiredExtensions_meta;
@@ -1599,6 +1833,7 @@ void TBXR_InitialiseOpenXR()
         instanceCreateInfo.enabledExtensionCount = numRequiredExtensions_pico;
         instanceCreateInfo.enabledExtensionNames = requiredExtensionNames_pico;
     }
+#endif
 
 	XrResult initResult;
 	OXR(initResult = xrCreateInstance(&instanceCreateInfo, &gAppState.Instance));
@@ -1617,6 +1852,13 @@ void TBXR_InitialiseOpenXR()
 			XR_VERSION_MAJOR(instanceInfo.runtimeVersion),
 			XR_VERSION_MINOR(instanceInfo.runtimeVersion),
 			XR_VERSION_PATCH(instanceInfo.runtimeVersion));
+#ifdef L1VR_STEAM_FRAME
+	ALOGI("[openxr] runtime: %s %u.%u.%u",
+			instanceInfo.runtimeName,
+			XR_VERSION_MAJOR(instanceInfo.runtimeVersion),
+			XR_VERSION_MINOR(instanceInfo.runtimeVersion),
+			XR_VERSION_PATCH(instanceInfo.runtimeVersion));
+#endif
 
 	XrSystemGetInfo systemGetInfo;
 	memset(&systemGetInfo, 0, sizeof(systemGetInfo));
@@ -1641,6 +1883,19 @@ void TBXR_InitialiseOpenXR()
 	graphicsRequirements.type = XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_ES_KHR;
 	OXR(pfnGetOpenGLESGraphicsRequirementsKHR(gAppState.Instance, gAppState.SystemId,
 											  &graphicsRequirements));
+#ifdef L1VR_STEAM_FRAME
+	{
+		XrSystemProperties systemProperties = {};
+		systemProperties.type = XR_TYPE_SYSTEM_PROPERTIES;
+		OXR(xrGetSystemProperties(gAppState.Instance, gAppState.SystemId, &systemProperties));
+		ALOGI("[openxr] system: %s, OpenGL ES %d.%d to %d.%d wanted by the runtime",
+			  systemProperties.systemName,
+			  XR_VERSION_MAJOR(graphicsRequirements.minApiVersionSupported),
+			  XR_VERSION_MINOR(graphicsRequirements.minApiVersionSupported),
+			  XR_VERSION_MAJOR(graphicsRequirements.maxApiVersionSupported),
+			  XR_VERSION_MINOR(graphicsRequirements.maxApiVersionSupported));
+	}
+#endif
 
     if (strstr(gAppState.OpenXRHMD, "meta") != NULL)
     {
@@ -1657,6 +1912,14 @@ void TBXR_InitialiseOpenXR()
 
 	TBXR_InitialiseResolution();
 }
+
+#ifdef L1VR_STEAM_FRAME
+//Where our play space sits in the runtime's, after recentring: a turn around
+//the vertical and a shift on the floor
+static float recenterYaw = 0.0f;
+static float recenterX = 0.0f;
+static float recenterZ = 0.0f;
+#endif
 
 void TBXR_Recenter() {
 
@@ -1685,6 +1948,13 @@ void TBXR_Recenter() {
 		OXR(xrDestroySpace(gAppState.FakeStageSpace));
 	}
 
+#ifdef L1VR_STEAM_FRAME
+	spaceCreateInfo.poseInReferenceSpace.orientation.y = sinf(recenterYaw * 0.5f);
+	spaceCreateInfo.poseInReferenceSpace.orientation.w = cosf(recenterYaw * 0.5f);
+	spaceCreateInfo.poseInReferenceSpace.position.x = recenterX;
+	spaceCreateInfo.poseInReferenceSpace.position.z = recenterZ;
+#endif
+
 	// Create a default stage space to use if SPACE_TYPE_STAGE is not
 	// supported, or calls to xrGetReferenceSpaceBoundsRect fail.
 	spaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
@@ -1702,14 +1972,95 @@ void TBXR_Recenter() {
 	}
 }
 
+#ifdef L1VR_STEAM_FRAME
+extern float snapTurn;
+
+//Puts the play space where the head is now and turns it to face the same way, so
+//"forward" is wherever the player looks. The view yaw the game already has stays
+//as it is (snapTurn takes up the difference), and so does the world position, so
+//nothing jumps. resetHeight also takes the head's height as the standing height.
+void TBXR_RecenterToHead(bool resetHeight)
+{
+	if (gAppState.Session == XR_NULL_HANDLE || gAppState.CurrentSpace == XR_NULL_HANDLE ||
+		gAppState.FrameState.predictedDisplayTime == 0)
+	{
+		return;
+	}
+
+	XrSpaceLocation loc = {};
+	loc.type = XR_TYPE_SPACE_LOCATION;
+	OXR(xrLocateSpace(gAppState.HeadSpace, gAppState.CurrentSpace, gAppState.FrameState.predictedDisplayTime, &loc));
+	const XrSpaceLocationFlags valid = XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
+	if ((loc.locationFlags & valid) != valid)
+	{
+		ALOGI("[openxr] recentre skipped, the head isn't tracked");
+		return;
+	}
+
+	//The head's yaw in the current space (forward is -z, turning left is positive)
+	const XrQuaternionf q = loc.pose.orientation;
+	const float fx = -2.0f * (q.x * q.z + q.w * q.y);
+	const float fz = -(1.0f - 2.0f * (q.x * q.x + q.y * q.y));
+	const float headYaw = atan2f(-fx, -fz);
+
+	const float yawBefore = hmdorientation[YAW];
+
+	//Add that to our offset: the head's floor position goes through the offset's own turn
+	const float c = cosf(recenterYaw);
+	const float s = sinf(recenterYaw);
+	recenterX += loc.pose.position.x * c + loc.pose.position.z * s;
+	recenterZ += -loc.pose.position.x * s + loc.pose.position.z * c;
+	recenterYaw += headYaw;
+
+	TBXR_Recenter();
+
+	//Where is the head now? Keep the world position and the view yaw as they were
+	loc.type = XR_TYPE_SPACE_LOCATION;
+	loc.next = NULL;
+	OXR(xrLocateSpace(gAppState.HeadSpace, gAppState.CurrentSpace, gAppState.FrameState.predictedDisplayTime, &loc));
+	if ((loc.locationFlags & valid) == valid)
+	{
+		vec3_t rotation = {0, 0, 0};
+		vec3_t yawAfter = {0, 0, 0};
+		QuatToYawPitchRoll(loc.pose.orientation, rotation, yawAfter);
+
+		snapTurn += yawBefore - yawAfter[YAW];
+		while (snapTurn > 180.0f) snapTurn -= 360.0f;
+		while (snapTurn < -180.0f) snapTurn += 360.0f;
+
+		worldPosition[0] = loc.pose.position.x;
+		worldPosition[1] = loc.pose.position.y;
+		worldPosition[2] = loc.pose.position.z;
+
+		if (resetHeight)
+		{
+			playerHeight = loc.pose.position.y;
+		}
+	}
+
+	ALOGI("[openxr] recentred%s, offset yaw %.1f deg, x %.2f, z %.2f",
+		  resetHeight ? " with height" : "", RAD2DEG(recenterYaw), recenterX, recenterZ);
+}
+#endif
+
 void TBXR_UpdateStageBounds() {
 	XrExtent2Df stageBounds = {};
 
 	XrResult result;
 	OXR(result = xrGetReferenceSpaceBoundsRect(
 			gAppState.Session, XR_REFERENCE_SPACE_TYPE_STAGE, &stageBounds));
+#ifdef L1VR_STEAM_FRAME
+	//This runs every frame, so only say it when the answer changes
+	static int lastResult = 1;
+	if (lastResult != (int)result) {
+		lastResult = (int)result;
+		ALOGI("[openxr] stage bounds: %s", result == XR_SUCCESS ? "ok" : "not available, using the local space");
+	}
+	if (result != XR_SUCCESS) {
+#else
 	if (result != XR_SUCCESS) {
 		ALOGE("Stage bounds query failed: using small defaults");
+#endif
 		stageBounds.width = 1.0f;
 		stageBounds.height = 1.0f;
 
@@ -1741,6 +2092,14 @@ static void TBXR_GetHMDOrientation() {
 	XrSpaceLocation loc = {};
 	loc.type = XR_TYPE_SPACE_LOCATION;
 	OXR(xrLocateSpace(gAppState.HeadSpace, gAppState.CurrentSpace, gAppState.FrameState.predictedDisplayTime, &loc));
+#ifdef L1VR_STEAM_FRAME
+	//Keep the last good pose, an untracked one has no usable rotation
+	const XrSpaceLocationFlags poseValid = XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
+	if ((loc.locationFlags & poseValid) != poseValid)
+	{
+		return;
+	}
+#endif
 	gAppState.xfStageFromHead = loc.pose;
 
 	const XrQuaternionf quatHmd = gAppState.xfStageFromHead.orientation;
@@ -1771,6 +2130,18 @@ void TBXR_FrameSetup()
         {
 			TBXR_Recenter();
         }
+
+#ifdef L1VR_STEAM_FRAME
+        if (runStatus == 0)
+        {
+            //SteamVR is done with us (EXITING or LOSS_PENDING), so shut the game down properly
+            ALOGI("[openxr] shutting down");
+            Host_Shutdown();
+            TBXR_LeaveVR();
+            VR_Shutdown();
+            exit(0);
+        }
+#endif
 
         if (gAppState.SessionActive == GL_FALSE)
         {
@@ -1936,6 +2307,15 @@ void TBXR_updateProjections()
 				   fabs(gAppState.Projections[1].fov.angleRight)) * 180.0f / M_PI);
 }
 
+#ifdef L1VR_STEAM_FRAME
+//The runtime says shouldRender=false while the headset is in standby (or the app
+//isn't showing), and then there's nothing to draw and nothing to simulate
+bool TBXR_ShouldRender()
+{
+	return gAppState.FrameState.shouldRender != XR_FALSE;
+}
+#endif
+
 void TBXR_submitFrame()
 {
 	if (gAppState.SessionActive == GL_FALSE) {
@@ -1946,6 +2326,11 @@ void TBXR_submitFrame()
 	memset(gAppState.Layers, 0, sizeof(xrCompositorLayer_Union) * ovrMaxLayerCount);
 
 	XrCompositionLayerProjectionView projection_layer_elements[2] = {};
+#ifdef L1VR_STEAM_FRAME
+	if (!TBXR_ShouldRender()) {
+		//Nothing was drawn, so the frame goes in without layers
+	} else
+#endif
 	if (!VR_UseScreenLayer()) {
 		XrCompositionLayerProjection projection_layer = {};
 		projection_layer.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION;

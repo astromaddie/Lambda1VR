@@ -30,6 +30,8 @@
 
 #define ALOGE(...) __android_log_print( ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__ )
 
+#define ALOGI(...) __android_log_print( ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__ )
+
 #if DEBUG
 #define ALOGV(...) __android_log_print( ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__ )
 #else
@@ -353,5 +355,12 @@ void TBXR_UpdateControllers( );
 void TBXR_prepareEyeBuffer(int eye );
 void TBXR_finishEyeBuffer(int eye );
 void TBXR_submitFrame();
+
+#ifdef L1VR_STEAM_FRAME
+//Steam Frame only
+bool TBXR_ExtensionEnabled(const char* name);
+bool TBXR_ShouldRender();
+void TBXR_RecenterToHead(bool resetHeight);
+#endif
 
 #endif //vrcommon_h
