@@ -63,6 +63,12 @@ extern int Host_Main( int argc, const char **argv, const char *progname, int bCh
 
 bool VR_UseScreenLayer()
 {
+#ifdef L1VR_STEAM_FRAME
+	if (vr_flat_screen != NULL && vr_flat_screen->integer != 0)
+	{
+		return true;
+	}
+#endif
 	return (showingScreenLayer || cls.demoplayback || cls.state == ca_cinematic || cls.key_dest != key_game);
 }
 
@@ -502,6 +508,7 @@ convar_t	*vr_hud_distance;
 convar_t	*vr_hud_level;
 convar_t	*vr_refresh_rate;
 convar_t	*vr_resolution_scale;
+convar_t	*vr_flat_screen;
 #endif
 
 
@@ -584,6 +591,7 @@ void VR_Init()
     vr_hud_distance = Cvar_Get( "vr_hud_distance", "1.0", CVAR_ARCHIVE, "How far ahead the HUD sits, in metres" );
     vr_refresh_rate = Cvar_Get( "vr_refresh_rate", "90", CVAR_ARCHIVE, "The display refresh rate to ask for, the highest the runtime offers that isn't over this" );
     vr_resolution_scale = Cvar_Get( "vr_resolution_scale", "1.25", CVAR_ARCHIVE, "Eye image size as a multiple of the runtime's recommended one (1.25 is the panel's 2160 on the Steam Frame), 0.5 to 2" );
+    vr_flat_screen = Cvar_Get( "vr_flat_screen", "0", CVAR_ARCHIVE, "1 shows the game on a flat screen in front of you instead of around you. The controllers only point and click then, like in a menu" );
     vr_hud_level = Cvar_Get( "vr_hud_level", "1", CVAR_ARCHIVE, "1 keeps the HUD, text, and camera-facing sprites level when the head rolls, 0 lets them roll with the head" );
 #endif
 

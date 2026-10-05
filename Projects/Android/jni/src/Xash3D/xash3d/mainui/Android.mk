@@ -14,6 +14,11 @@ endif
 LOCAL_MODULE := menu
 LOCAL_CPPFLAGS := -std=gnu++11 -DMAINUI_USE_STB -DMAINUI_USE_CUSTOM_FONT_RENDER -DNO_STL -fno-rtti -fno-exceptions -DVR
 
+# Valve Steam Frame build (gradle assembleFrame): the options that only it has
+ifeq ($(L1VR_STEAM_FRAME),1)
+LOCAL_CPPFLAGS += -DL1VR_STEAM_FRAME
+endif
+
 LOCAL_C_INCLUDES := \
 	$(SDL_PATH)/include				\
 	$(LOCAL_PATH)/. 				\

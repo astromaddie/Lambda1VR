@@ -66,6 +66,9 @@ public:
 	CMenuCheckBox   vbo;
 	CMenuCheckBox   actionables;
 	CMenuCheckBox   fps;
+#ifdef L1VR_STEAM_FRAME
+	CMenuCheckBox   flatScreen;
+#endif
 	CMenuSlider		height;
 	CMenuSlider		vignette;
 
@@ -104,6 +107,9 @@ void CMenuVidOptions::SaveAndPopMenu( void )
 	vbo.WriteCvar();
 	actionables.WriteCvar();
 	fps.WriteCvar();
+#ifdef L1VR_STEAM_FRAME
+	flatScreen.WriteCvar();
+#endif
 	height.WriteCvar();
 	vignette.WriteCvar();
 	// gamma is already written
@@ -240,8 +246,19 @@ void CMenuVidOptions::_Init( void )
 	fps.SetCoord( 72, 705 );
 	fps.LinkCvar( "cl_showfps" );
 
+#ifdef L1VR_STEAM_FRAME
+	// Steam Frame build only: the game on a flat screen in front of you, it has no button
+	flatScreen.SetNameAndStatus( "Flat Screen View", "Show the game on a flat screen in front of you. The controllers only point and click then" );
+	flatScreen.SetCoord( 72, 755 );
+	flatScreen.LinkCvar( "vr_flat_screen" );
+#endif
+
 	done.SetNameAndStatus( "Done", "Go back to the Video Menu" );
+#ifdef L1VR_STEAM_FRAME
+	done.SetCoord( 72, 805 );
+#else
 	done.SetCoord( 72, 755 );
+#endif
 	done.SetPicture( PC_DONE );
 	done.onActivated = VoidCb( &CMenuVidOptions::SaveAndPopMenu );
 
@@ -253,6 +270,9 @@ void CMenuVidOptions::_Init( void )
 	AddItem( refresh );
 	AddItem( actionables );
 	AddItem( fps );
+#ifdef L1VR_STEAM_FRAME
+	AddItem( flatScreen );
+#endif
 	AddItem( vbo );
 	AddItem( height );
 	AddItem( vignette );

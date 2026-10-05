@@ -2,7 +2,9 @@
 // the host. It follows Half-Life's own Steam Input gamepad layout (the 25th anniversary update's
 // xbox_controller_config_standard.vdf: sticks move and turn, RT fires, LT alt fires, A jump,
 // B crouch, X use, Y reload, bumpers and D-pad pick weapons, Start pauses and, held, quick saves,
-// Select is the flashlight) with the VR parts added: the grips, and the head for looking.
+// Select is the flashlight) with the VR parts added: the grips, and the head for looking. The right
+// stick's up and down do nothing in the game (it turns left and right), and the flat screen view is a
+// setting (vr_flat_screen), not a button.
 //
 // The Frame's controllers are a split gamepad: the left one has the D-pad, View, a bumper, trigger,
 // grip and stick, the right one has A B X Y, Menu, a bumper, trigger, grip and stick. Handedness
@@ -31,9 +33,9 @@ enum {
 enum {
 	ACT_NONE,
 	ACT_FIRE, ACT_ALTFIRE, ACT_USE, ACT_USE_OFF, ACT_RELOAD, ACT_JUMP, ACT_CROUCH_HOLD, ACT_CROUCH_TOGGLE,
-	ACT_FLASHLIGHT, ACT_SCREEN_VIEW, ACT_LASER,
+	ACT_FLASHLIGHT, ACT_SCOREBOARD, ACT_LASER,
 	ACT_MOVE, ACT_TURN,
-	ACT_PREV_WEAPON, ACT_NEXT_WEAPON, ACT_LAST_WEAPON, ACT_CROWBAR,
+	ACT_PREV_WEAPON, ACT_NEXT_WEAPON, ACT_LAST_WEAPON,
 	ACT_BACKPACK, ACT_STEADY,
 	ACT_PAUSE, ACT_QUICKSAVE, ACT_QUICKLOAD,
 	ACT_RECENTRE, ACT_RECENTRE_HEIGHT,

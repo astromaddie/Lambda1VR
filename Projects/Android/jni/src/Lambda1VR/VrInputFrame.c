@@ -101,12 +101,16 @@ void VrInputFrame_Apply(const frameRaw_t* raw)
 	static bool crouchToggled = false;
 	static bool offGripWasDown = false;
 	static bool offGripAway = false;
+	static bool scoreboardShown = false;
 
 	frameHandUse = true;
 
 	const bool leftHanded = (vr_control_scheme != NULL && vr_control_scheme->integer >= 10);
 	const bool menu = cls.key_dest != key_game;
 	const bool multiplayer = isMultiplayer();
+	if (!multiplayer) {
+		scoreboardShown = false;
+	}
 
 	ovrInputStateTrackedRemote* dom = leftHanded ? &leftTrackedRemoteState_new : &rightTrackedRemoteState_new;
 	ovrInputStateTrackedRemote* off = leftHanded ? &rightTrackedRemoteState_new : &leftTrackedRemoteState_new;
@@ -204,12 +208,12 @@ void VrInputFrame_Apply(const frameRaw_t* raw)
 	// The Quest-shaped states the scheme code reads. The dominant hand: trigger fires (or clicks in a
 	// menu), grip (only the backpack, from behind the head), stick turns, use on the stick click
 	// bit, crouch and jump on its two buttons. The off hand: grip steadies the gun, its stick
-	// moves, its two buttons are the torch and the screen view (and, with the hand behind the
-	// head, quick save and load), the stick click bit is the laser sight.
+	// moves, its two buttons are the torch and (with the hand behind the head) quick save and
+	// load, the stick click bit is the laser sight.
 	const uint32_t domCrouch = leftHanded ? xrButton_X : xrButton_A;
 	const uint32_t domJump = leftHanded ? xrButton_Y : xrButton_B;
 	const uint32_t offTorch = leftHanded ? xrButton_A : xrButton_X;
-	const uint32_t offScreen = leftHanded ? xrButton_B : xrButton_Y;
+	const uint32_t offLoad = leftHanded ? xrButton_B : xrButton_Y;
 
 	leftTrackedRemoteState_new.Buttons &= ~MAP_BUTTONS;
 	rightTrackedRemoteState_new.Buttons &= ~MAP_BUTTONS;
@@ -222,7 +226,7 @@ void VrInputFrame_Apply(const frameRaw_t* raw)
 	if (HAS(ACT_USE)) dom->Buttons |= xrButton_Joystick;
 	// what the Quest does with its off-hand buttons, with the hand behind the head
 	if (HAS(ACT_FLASHLIGHT) || (HAS(ACT_QUICKSAVE) && !quickSaveFromMenuHold)) off->Buttons |= offTorch;
-	if (HAS(ACT_SCREEN_VIEW) || HAS(ACT_QUICKLOAD)) off->Buttons |= offScreen;
+	if (HAS(ACT_QUICKLOAD)) off->Buttons |= offLoad;
 	if (HAS(ACT_LASER)) off->Buttons |= xrButton_Joystick;
 	// one escape for pause and for every way back
 	if (HAS(ACT_PAUSE) || HAS(ACT_MENU_BACK)) leftTrackedRemoteState_new.Buttons |= xrButton_Enter;
@@ -263,7 +267,11 @@ void VrInputFrame_Apply(const frameRaw_t* raw)
 		if (PRESSED(ACT_PREV_WEAPON)) sendButtonActionSimple("invprev");
 		if (PRESSED(ACT_NEXT_WEAPON)) sendButtonActionSimple("invnext");
 		if (PRESSED(ACT_LAST_WEAPON)) sendButtonActionSimple("lastinv");
-		if (PRESSED(ACT_CROWBAR)) sendButtonActionSimple(g_pszBackpackWeapon);
+		if (PRESSED(ACT_SCOREBOARD) && multiplayer) {
+			// the scoreboard only. The flat screen view is the vr_flat_screen setting, no button does it
+			scoreboardShown = !scoreboardShown;
+			sendButtonAction("+showscores", scoreboardShown);
+		}
 		if (quickSaveFromMenuHold && PRESSED(ACT_QUICKSAVE) && !multiplayer) {
 			sendButtonActionSimple("savequick");
 			TBXR_Vibrate(80, leftHanded ? 0 : 1, 0.6f);

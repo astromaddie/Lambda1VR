@@ -77,8 +77,7 @@ and the grips are your hands.
 | Left stick click | Crouch (toggle). Physically ducking still works |
 | Right stick left / right | Turn (Lambda1VR's snap or smooth turn) |
 | Right stick click | Flashlight |
-| Right stick up | Flat screen view (the scoreboard in multiplayer) |
-| Right stick down | Laser sight, and steadies a scope |
+| Right stick up / down | Nothing in the game |
 | Weapon hand trigger | Fire |
 | Other hand trigger | Alt fire |
 | A | Jump |
@@ -86,9 +85,9 @@ and the grips are your hands.
 | X | Use |
 | Y | Reload |
 | Left / right bumper | Previous / next weapon (fire to pick it, like in Half-Life) |
-| D-pad up / down | Previous / next weapon, same as the bumpers |
-| D-pad right | Last weapon |
-| D-pad left | Crowbar |
+| D-pad left / right | Previous / next weapon, same as the bumpers |
+| D-pad up | Last weapon |
+| D-pad down | Laser sight, and steadies a scope |
 | Menu | Pause menu. Held for half a second: quick save |
 | View | Flashlight (the scoreboard in multiplayer) |
 | View, held 1 s | Recentre, with a buzz |
@@ -110,8 +109,18 @@ hand. Waving a hand about doesn't use things on the Frame, double clicking jump 
 Kept as it was: aiming from the controller, swinging the crowbar, the flashlight beam from your off hand
 (`vr_headtorch` and `vr_reversetorch` still work), the two-handed scope, reaching behind your head for the
 crowbar, ducking by ducking, walking around the room, haptics, the highlight on things you can use. With
-your other hand behind your head, the flashlight and View buttons are quick save, and the right stick up
-is quick load, as on the Quest. Walk (the slow key) is gone, the stick is analog.
+your other hand behind your head, the right stick click is quick save and View is quick load, like the
+two buttons on a Quest controller. Walk (the slow key) is gone, the stick is analog.
+
+The right stick is only for turning. Pushing it up or down does nothing in the game, so you can't hit the
+laser sight or anything else by accident while you turn. The crowbar is the weapon hand's grip behind your
+head, there's no button for it.
+
+There's no button for the flat screen view either. It's a setting now: Pause, Configuration, Video, Video
+options, "Flat Screen View" (the `vr_flat_screen` cvar, off by default, and only in the Frame build). It
+puts the game on a flat screen in front of you instead of around you. The controllers only point and click
+in that mode, like in a menu, so it's for watching and not for playing. Menu still opens the pause menu, so
+you can turn it off again from there.
 
 | Frame | In a menu |
 | --- | --- |

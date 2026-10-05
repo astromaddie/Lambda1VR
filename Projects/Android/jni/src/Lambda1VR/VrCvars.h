@@ -40,4 +40,5 @@ extern convar_t *vr_hud_distance;
 extern convar_t *vr_hud_level;
 extern convar_t *vr_refresh_rate;
 extern convar_t *vr_resolution_scale;
+extern convar_t *vr_flat_screen;
 #endif
