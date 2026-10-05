@@ -5,8 +5,9 @@ apps in a container called Lepton (Android 11, arm64, GLES 3.2) on top of
 SteamVR's OpenXR runtime. So it's the same Android app, with a few changes to
 get it going there.
 
-I haven't had it on my head yet. It builds, it runs on the Frame (unattended, on a desk) and it
-draws the first level in both eyes. See the end for what's checked and what isn't.
+I've had it on my head now and it feels really good: a smooth 120 fps, sharp and clean. The settings
+it ran with are in "Reference display settings" below. Most of what's in the checks at the end was
+done earlier, unattended with the headset on a desk, and I haven't gone back over that list yet.
 
 ## Build
 
@@ -127,6 +128,33 @@ input that does two things in one situation and for actions nothing can reach.
 If SteamVR hands the app Index or Touch controllers instead, they bind like they do on Quest (Index has no
 Menu for apps, so pause is the left trackpad pressed hard). The Frame layout only kicks in when the runtime
 says the Frame profile is active.
+
+## Reference display settings
+
+This is what the build runs at by default, and what I wore when it felt right. I treat it as the
+target for anything else I port to the Frame, so I'm writing it down.
+
+- Refresh is 120 Hz. That comes from SteamVR, from the per-app setting for the game in the headset's
+  SteamVR settings. The game's own `vr_refresh_rate` (default 90) only picks from the rates SteamVR
+  offers, and it offers just the one set for the app, so the app can't push it higher. It only counts when
+  the game is started from the Steam library. Started from adb it runs at 72.
+- Each eye is 2160 x 2160. That's the 1728 SteamVR recommends times `vr_resolution_scale` (1.25), which is
+  the panel's own size. There's no extra supersampling on top of that.
+- The eye images are sRGB (`GL_SRGB8_ALPHA8`), one swapchain per eye, three images each. No multiview.
+- No MSAA. It's one sample, plain GLES 3 framebuffers. The engine's `gl_msaa` is 0 too.
+- Depth is a 24 bit renderbuffer, no stencil, and it isn't handed to SteamVR as a depth layer.
+- No foveation.
+- The game's GL comes from gl4es, using its GLES 2.0 backend on top of a GLES 3 context.
+- Textures are trilinear (`gl_texturemode GL_LINEAR_MIPMAP_LINEAR`) with 8x anisotropic filtering
+  (`gl_anisotropy 8`), no LOD bias, no picmip.
+- The shipped `config.cfg` has `gamma 2.0` and `brightness 0.8`. My own copy on the headset had `gamma 2.5`,
+  so that's what I was looking at.
+
+What I measured with it unattended at 120 Hz and 2160 (headset in standby, so there's no scan-out and the
+compositor's cost isn't in it): 120 fps and no missed frames, over six runs on two saves. The frame period is
+8.33 ms. The game thread uses about 3.1 ms of that. The Adreno runs at 903 MHz and is about 60% busy at
+1728, and 100% busy at 2160. Bigger still held 120 on the busy save (2592 and 3024 per eye, one run each),
+but I didn't wear those.
 
 ## What's different from the Quest build, and why
 
