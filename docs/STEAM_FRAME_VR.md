@@ -25,6 +25,27 @@ The first build downloads the Khronos OpenXR loader (1.1.63) from Maven
 Central, checks its SHA-256 and unpacks it into `Projects/Android/build/`. Nothing
 gets committed. The Quest builds don't touch it.
 
+### The menu tile
+
+Team Beef's menu background has the Quest's button help baked into one tile, `800_1_a_loading.tga`.
+The Frame build swaps in its own, with the Frame's buttons on it. `assembleFrame` makes it by itself: it
+runs `tools/steam_frame/make_frame_tile.py`, which reads the release tile, takes the old text off and
+draws the new one, and writes the result to `Projects/Android/build/frame-assets`. That folder is only
+added to the Frame build, so Quest and Pico builds are the same as before. Nothing it makes is committed.
+
+It needs two things. The release tile has to be in `assets/background` (git ignores that folder, so
+copy it from Team Beef's v1.7.4 release APK, the `assets/background` folder in it). And it needs Python 3
+with Pillow and numpy:
+
+```
+python3 -m venv tools/steam_frame/.venv
+tools/steam_frame/.venv/bin/pip install pillow numpy
+```
+
+The build uses that venv if it's there, else `python3`. `-PframePython=/path/to/python` or
+`FRAME_PYTHON` picks another. If the tile or the modules are missing, the build still works. It says so
+and the Frame APK gets the release tile, with the Quest help.
+
 ## Install and run
 
 Start "Lepton Development" on the Frame and use adb over the network:

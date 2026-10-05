@@ -72,3 +72,6 @@ assets/AoMDC/models/gmgeneral_display.aomdc
 
 # Steam Frame build: the Khronos OpenXR loader gets fetched here
 Projects/Android/build/
+
+# Steam Frame build: Python for the menu tile
+tools/steam_frame/.venv/
